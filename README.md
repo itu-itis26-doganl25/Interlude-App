@@ -35,7 +35,7 @@ An AI-powered chatbot or music-discovery assistant is **optional** and will only
 | **Sudenaz Hasret** | Authentication, role-based access, and profiles | Requirements, customer requests, and documentation review |
 | **Kağan Temur** | Listening rooms, WebSocket presence/chat and related UI | Test specification and coverage coordination |
 | **Efe Arda Demir** | Listening analytics, dashboard and shared frontend UI | Statistical analysis implementation coordination |
-| **Ahmet Taha Angın** | Shared frontend UI, integration and optional AI evaluation | Documentation consistency and design review |
+| **Ahmet Taha Angın** | Shared frontend UI, native mobile application & integration and optional AI evaluation | Documentation consistency and design review |
 
 Every member is responsible for implementing, documenting, and testing their assigned work.
 
