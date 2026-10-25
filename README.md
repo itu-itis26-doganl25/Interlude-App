@@ -1,64 +1,57 @@
 # Interlude Music App
 
-**BLG 411E — Software Engineering | Istanbul Technical University**  
+**Nova · BLG 411E Software Engineering · Istanbul Technical University**  
 **Status:** In development
 
-Interlude is a social music platform that combines music discovery, real-time shared listening, and community interaction. Listeners can explore music and connect through listening rooms and chat, while musicians can view basic analytics about their tracks.
+Interlude is a social music platform for discovering and playing music, listening together in real time, and connecting with other listeners. Musicians can share tracks and view basic listening statistics.
 
 ## Planned Features
 
-- User authentication, role-based access, and listener/musician profiles
-- Song and album catalogue, search, media upload, and music playback
-- Shared listening rooms, participant presence, and real-time chat
-- Listening statistics and a musician analytics dashboard
-- A **basic native mobile application**, with its target platform and initial features to be defined during design
-
-An AI-powered chatbot or music-discovery assistant is **optional** and will only be considered after the core features are completed.
+- Authentication, role-based access, and listener/musician profiles
+- Song and album catalogue, media upload, search, and playback
+- Shared listening rooms with synchronized playback, presence, and chat
+- Listening analytics and a musician dashboard
+- Native mobile app with selected features: login, search, and playback
+- **Optional:** AI-powered music-discovery assistant, after core features are complete
 
 ## Technology Stack
 
 | Area | Technologies |
 | --- | --- |
 | Backend | Python, Django, Django ORM, REST APIs |
-| Real-time communication | WebSocket, WebRTC |
-| Frontend | React, TypeScript, HTML, CSS |
-| Cloud and storage | Microsoft Azure; media storage integration |
-| Native mobile | Platform and implementation approach to be selected |
-| AI-assisted development | Claude Code and ChatGPT (GPT models) |
+| Web frontend | React, TypeScript |
+| Real-time | WebSocket, WebRTC |
+| Cloud and media storage | Microsoft Azure |
+| Mobile | Framework to be selected (React Native is under consideration) |
+| AI-assisted development | Claude Code, ChatGPT; generated work is reviewed and tested |
 
 ## Team
 
-| Member | Development Responsibilities | Management Responsibilities |
+| Member | Development role | Management role |
 | --- | --- | --- |
-| **Şevval Tüfekçi** | Music catalogue, streaming APIs, homepage and player UI | Product Owner; planning, meetings, and risk tracking |
-| **Lara Doğan** | Frontend foundation, cloud infrastructure and integration | Repository, GitHub Projects, CI/CD, deployment and releases |
-| **Sudenaz Hasret** | Authentication, role-based access, and profiles | Requirements, customer requests, and documentation review |
-| **Kağan Temur** | Listening rooms, WebSocket presence/chat and related UI | Test specification and coverage coordination |
-| **Efe Arda Demir** | Listening analytics, dashboard and shared frontend UI | Statistical analysis implementation coordination |
-| **Ahmet Taha Angın** | Shared frontend UI, native mobile application & integration and optional AI evaluation | Documentation consistency and design review |
-
-Every member is responsible for implementing, documenting, and testing their assigned work.
+| Şevval Tüfekçi | Catalogue, media, streaming, player UI | Product Owner & project coordination |
+| Lara Doğan | Frontend foundation, cloud and integration | Repository, CI/CD & release management |
+| Sudenaz Hasret | Authentication, RBAC and profiles | Requirements & customer-request coordination |
+| M. Kağan Temur | Listening rooms, chat and synchronized playback | Testing & coverage coordination |
+| Efe Arda Demir | Analytics, dashboard and frontend UI | Statistical-analysis coordination |
+| Ahmet Taha Angın | Native mobile app and shared frontend UI | Documentation & design-review coordination |
 
 ## Repository Structure
 
 ```text
 Interlude-App/
 ├── src/
-│   ├── backend/      # Django backend and REST APIs
-│   └── frontend/     # React + TypeScript frontend
-├── tests/            # Automated tests
-├── docs/             # Project documentation
+│   ├── backend/       # Django application
+│   └── frontend/      # React + TypeScript web application
+├── tests/             # Automated tests
+├── docs/              # Project documentation
 └── README.md
 ```
 
-The folders are currently initialized with `.gitkeep` placeholders. Application code, tests, and documentation will be added as development progresses. The native mobile application's framework and location in the repository will be decided during design.
+The mobile application will receive its own source directory after its framework is selected. Initial directories may contain `.gitkeep` placeholders.
 
-## Collaboration and Workflow
+## Workflow
 
-- Develop on separate branches and submit changes to `main` through reviewed Pull Requests.
-- Submit document deliverables through GitHub Releases targeting their respective document branches.
-- Track tasks using GitHub Issues and Projects, including customer requests labeled `customer-requests`.
-
-For the full scope, milestone dates, and responsibilities, see the [Project Charter](docs/Charter.md) once it is added to `docs/`.
+We use GitHub Issues and Projects for task tracking, feature branches and reviewed Pull Requests for changes, and branch-targeted GitHub Releases for course document submissions. All team members test and document their own modules; AI-generated contributions are reviewed before merging.
 
 **Repository:** [Interlude-App](https://github.com/itu-itis26-doganl25/Interlude-App)
