@@ -8,10 +8,10 @@
 | **Report name** | Project Plan |
 | **Project title** | Interlude Music App |
 | **Group name / number** | Nova |
-| **Group members** | Şevval Tüfekçi 150230079, Lara Doğan 150250706, Sudenaz Hasret  150230072, M. Kağan Temur 150230093,  Efe Arda Demir 150240078,  Ahmet Taha Angın 150230034 |
+| **Group members** | Şevval Tüfekçi 150230079,  Lara Doğan 150250706,  Sudenaz Hasret  150230072, M. Kağan Temur 150230093,  Efe Arda Demir 150240078,  Ahmet Taha Angın 150230034 |
 | **Instructor** | Ayşe Tosun Kühn |
 | **Submission date** | 2026-10-24 |
-| **Document version** | 1.0 |
+| **Document version** | 1.1 |
 
 ---
 
@@ -65,13 +65,13 @@ Interlude is a social music platform in the music-streaming and social-listening
 | :---- | :---- | :---- | :---- |
 | D-01 | Authentication & User Management Module | Registration, login, auth, role-based access control, user and musician profiles (backend \+ web UI) | Users can register, log in and edit profiles; role-restricted endpoints reject unauthorized roles; module tests pass in CI |
 | D-02 | Music Catalogue & Streaming Module | Song/album models and metadata, media upload to Azure storage, search/browse APIs and pages, streaming API and music player | A musician can upload a track with metadata; a listener can find it via search and play it in the player; module tests pass |
-| D-03 | Listening Rooms & Real-time Communication Module | Room creation/join/leave, WebSocket presence and chat, WebRTC synchronized playback, room/chat UI | Two or more users in one room see each other's presence, exchange chat messages and hear the same track in sync |
+| D-03 | Listening Rooms & Real-time Communication Module | Room creation/join/leave and room participation (participant list), WebSocket presence and chat, WebRTC synchronized playback, room/chat UI | Two or more users in one room see each other's presence, exchange chat messages and hear the same track in sync |
 | D-04 | Analytics & Musician Dashboard | Listening-event collection, analytics APIs/metrics, dashboard with charts | Plays are recorded; a musician sees play counts and popular tracks for their own music only |
-| D-05 | Web Frontend Application | React/TypeScript app: shared layout and routing plus all feature pages | All core pages are reachable via routing and work against the deployed backend |
+| D-05 | Web Frontend Application | React/TypeScript app: shared layout and routing plus feature pages for authentication (login/registration), user and musician profiles, homepage/catalogue/search, music player, listening rooms, room chat and musician dashboard | Each of these pages is reachable via routing and works against the deployed backend |
 | D-06 | Native Mobile Application | Mobile app with selected core features integrated with the backend API | App runs on the chosen platform and completes login → search → play against the deployed API |
-| D-07 | Infrastructure, CI/CD & Deployment | GitHub repository with branch protection, CI pipeline, Azure environment, released and deployed version | Every merge to main runs CI, tagged release v1.0 is deployed and reachable for the demo |
+| D-07 | Infrastructure, CI/CD, Deployment & Release Management | GitHub repository with branch protection, GitHub Projects board for issue tracking, CI/CD pipeline, Azure environment, release management (version tags and release notes), released and deployed version (or an agreed demo environment) | Every merge to main runs CI; all work items are tracked as issues on the board; tagged release v1.0 with release notes is deployed and reachable for the demo |
 | D-08 | Test Suite & Coverage Report | Test specification, unit/integration/system tests, coverage reports | All tests pass in CI; backend coverage ≥ 70%; test results feed the Software Test Report |
-| D-09 | Documentation | Requirements, design and technical/module documentation, project-management records | Documents are reviewed for consistency and match the delivered system |
+| D-09 | Documentation & Requirements Management | Requirements, design and technical/module documentation, project-management records; requirements management (customer request log and traceability of each requirement to its task/issue) | Documents are reviewed for consistency and match the delivered system; every requirement is traceable to a task/issue |
 | D-10 *(optional)* | AI Music-Discovery Assistant | Small chatbot using an existing AI API, with documented purpose, limitations, error types and privacy review | Only delivered if the go/no-go checkpoint approves it. |
 
 ### 1.3 Functional Requirements / Tasks
@@ -94,7 +94,7 @@ Interlude is a social music platform in the music-streaming and social-listening
 | T-14 | Native mobile application | Mobile client with selected core features integrated with the backend | D-06 |
 | T-15 | Testing & coverage | Test-first specification, module tests, system integration tests, coverage tracking | D-08 |
 | T-16 | Deployment, release & demo | Release v1.0 deployed on Azure, demo and presentation prepared | D-07 |
-| T-17 | Documentation & project management | Planning, meetings, risk tracking, requirements /design/technical documentation | D-09 |
+| T-17 | Documentation & project management | Planning, meetings, risk tracking, issue tracking, requirements management, requirements/design/technical documentation | D-09, D-07 |
 | T-18 *(optional)* | AI music discovery assistant | Small chatbot using an existing AI API, if time permits | D-10 |
 
 ### 1.4 Non-functional Issues
@@ -173,50 +173,62 @@ Size scale: **T \= Tiny · S \= Small · M \= Medium · L \= Large · XL \= Extr
 
 Size-to-effort conversion: **T \= 0.25 · S \= 0.5 · M \= 1 · L \= 2 · XL \= 3 human-weeks**
 
-| WBS activity ID | Size | Estimated effort (man-weeks) | Basis / assumptions |
+**Sizing criteria:** Each activity was sized against four drivers: **(1) scope** — how many models, endpoints, pages or screens it produces; **(2) novelty** — whether the technology is new to the team; **(3) dependencies** — how many other modules it must integrate with; **(4) uncertainty** — how open the technical solution still is. Scope sets the starting size; high novelty, many dependencies or high uncertainty move it up one class, and strong framework support (e.g. Django auth, GitHub Actions templates) can move it down one class.
+
+| Size | Effort (human-weeks) | Criteria | Reference activities |
 | :---- | :---- | :---- | :---- |
-| WBS-1.1 | S | 0.5 | Standard GitHub setup; team has used GitHub before |
-| WBS-1.2 | S | 0.5 | Uses GitHub Actions templates |
-| WBS-1.3 | S | 0.5 | Managed Azure services; first-time Azure setup adds some learning |
-| WBS-1.4 | M | 1 | Several apps and models, requires team agreement on schema |
-| WBS-1.5 | S | 0.5 | Standard React/TS scaffolding with router |
-| WBS-2.1 | M | 1 | Django auth reduces work, token handling for REST and WebSocket adds some |
-| WBS-2.2 | S | 0.5 | Two forms with validation |
-| WBS-3.1 | S | 0.5 | Django permission classes / groups |
-| WBS-4.1 | S | 0.5 | Simple CRUD endpoints |
-| WBS-4.2 | S | 0.5 | Profile view/edit pages |
-| WBS-5.1 | M | 1 | Two related entities with metadata and validation |
-| WBS-6.1 | M | 1 | Azure Blob SDK integration, file validation |
-| WBS-7.1 | S | 0.5 | ORM filtering and pagination |
-| WBS-7.2 | M | 1 | Three pages with search and listing states |
-| WBS-8.1 | S | 0.5 | Range requests / time-limited storage URLs |
-| WBS-8.2 | M | 1 | Player state, controls and queue |
-| WBS-9.1 | S | 0.5 | Simple CRUD |
-| WBS-9.2 | M | 1 | Room list and live room page |
-| WBS-10.1 | M | 1 | New technology for the team (WebSocket server, auth on connect) |
-| WBS-10.2 | M | 1 | Builds on WBS-10.1 |
-| WBS-11.1 | M | 1 | Research heavy spike |
-| WBS-11.2 | L | 2 | Hardest technical feature, synchronization and edge cases |
-| WBS-12.1 | S | 0.5 | Event model already in WBS-1.4 |
-| WBS-12.2 | M | 1 | Aggregation queries and agreed statistical analysis |
-| WBS-13.1 | M | 1 | Charting library integration |
-| WBS-13.2 | M | 1 | Cross page consistency work |
-| WBS-14.1 | S | 0.5 | Framework comparison and setup |
-| WBS-14.2 | L | 2 | Several screens on a new platform for the team |
-| WBS-14.3 | M | 1 | Reuses existing REST APIs |
-| WBS-15.1 | S | 0.5 | Test plan per module |
-| WBS-15.2 | L | 2 | Spread across all six members (\~0.33 each) |
-| WBS-15.3 | M | 1 | End-to-end scenarios and final coverage report |
+| T (Tiny) | 0.25 | Configuration or verification only, no new code, fully automated steps, no uncertainty | WBS-16.1 |
+| S (Small) | 0.5 | One component (about 1–2 endpoints, 1–2 pages or one setup task), familiar technology or strong framework support, few dependencies, low uncertainty | WBS-2.2, WBS-4.1, WBS-9.1 |
+| M (Medium) | 1 | Several related entities/pages (about 3+), **or** one technology new to the team, **or** needs agreement/integration with another module; moderate uncertainty | WBS-5.1, WBS-10.1, WBS-12.2 |
+| L (Large) | 2 | Spans several modules or a new platform, many states and edge cases, high technical uncertainty | WBS-11.2, WBS-14.2 |
+| XL (Extra-large) | 3 | A whole module on unknown technology — not used: any XL candidate was split (T-11 into spike + integration, T-14 into setup, screens and integration) | – |
+
+Level-of-effort activities (WBS-15.2, 16.2, 17.1–17.4) are not features; their size was derived from the planned FTE × duration and then mapped to the nearest size class.
+
+| WBS activity ID | Size | Estimated effort (man-weeks) | Basis / assumptions (scope · novelty · dependencies · uncertainty) |
+| :---- | :---- | :---- | :---- |
+| WBS-1.1 | S | 0.5 | One setup task (repo, rules, PR template, board); GitHub already known to the team; no dependencies |
+| WBS-1.2 | S | 0.5 | One pipeline; GitHub Actions templates reduce work; depends only on WBS-1.1 |
+| WBS-1.3 | S | 0.5 | Three managed services (hosting, DB, Blob); first-time Azure setup adds learning, managed services keep it small |
+| WBS-1.4 | M | 1 | Five core models across several apps; every backend module depends on it, so team agreement on the schema is needed |
+| WBS-1.5 | S | 0.5 | Standard React/TS scaffolding with router and API client; familiar stack, no backend dependency |
+| WBS-2.1 | M | 1 | Three endpoints; Django auth would make it S, but token handling for both REST and WebSocket adds a new dependency → M |
+| WBS-2.2 | S | 0.5 | Two forms with validation; familiar React work; depends only on WBS-2.1 contract |
+| WBS-3.1 | S | 0.5 | Three roles; Django permission classes/groups do most of the work; low uncertainty |
+| WBS-4.1 | S | 0.5 | Simple view/edit CRUD endpoints; familiar Django REST work |
+| WBS-4.2 | S | 0.5 | Two pages (view/edit) for two user types sharing one layout; familiar stack |
+| WBS-5.1 | M | 1 | Two related entities (song, album) with metadata and validation; base for upload, search and streaming |
+| WBS-6.1 | M | 1 | One feature but new SDK (Azure Blob) plus file-type/size validation; depends on WBS-1.3 and WBS-5.1 |
+| WBS-7.1 | S | 0.5 | One search/list endpoint; ORM filtering and pagination are standard |
+| WBS-7.2 | M | 1 | Three pages (homepage, catalogue, search) with loading/empty/result states |
+| WBS-8.1 | S | 0.5 | One endpoint; range requests / time-limited storage URLs are supported by Azure SDK |
+| WBS-8.2 | M | 1 | Player state, controls and queue; integrates with streaming API and later with rooms (WBS-11.2) |
+| WBS-9.1 | S | 0.5 | Simple CRUD for one entity; familiar Django REST work |
+| WBS-9.2 | M | 1 | Two pages (room list, live room) with real-time updates; depends on WebSocket events (WBS-10.1) |
+| WBS-10.1 | M | 1 | Small scope but new technology for the team (WebSocket server, auth on connect) → moved up to M |
+| WBS-10.2 | M | 1 | Backend + UI + message persistence; builds on WBS-10.1 |
+| WBS-11.1 | M | 1 | Research-heavy spike on new technology (WebRTC); time-boxed, so uncertainty is capped at M |
+| WBS-11.2 | L | 2 | Hardest feature: new technology, converges three workstreams (streaming, WebSocket, spike), many sync edge cases, high uncertainty |
+| WBS-12.1 | S | 0.5 | Three event types; event model already defined in WBS-1.4 (by E) |
+| WBS-12.2 | M | 1 | Several endpoints with aggregation queries and agreed statistical analysis |
+| WBS-13.1 | M | 1 | Dashboard page with several charts; charting library new to the team |
+| WBS-13.2 | M | 1 | Touches all pages (cross-page consistency); depends on every UI activity |
+| WBS-14.1 | S | 0.5 | Framework comparison and one project setup; time-boxed decision |
+| WBS-14.2 | L | 2 | Several screens (login, browse/search, player) on a platform new to the team, high uncertainty |
+| WBS-14.3 | M | 1 | Reuses existing REST APIs, but needs device/emulator testing against the deployed backend |
+| WBS-15.1 | S | 0.5 | One test plan document with test cases per module |
+| WBS-15.2 | L | 2 | Level-of-effort: ~0.33 man-weeks for each of six members |
+| WBS-15.3 | M | 1 | End-to-end scenarios across all modules plus final coverage report |
 | WBS-16.1 | T | 0.25 | Deployment automated by CI, release is mostly verification |
-| WBS-16.2 | S | 0.5 | Shared by all members |
-| WBS-17.1 | M | 1 | \~0.1 FTE over 10 weeks |
-| WBS-17.2 | M | 1 | Two reports plus customer notes |
-| WBS-17.3 | M | 1 | Design report coordination and review |
-| WBS-17.4 | S | 0.5 | Shared by all module owners |
+| WBS-16.2 | S | 0.5 | Level-of-effort shared by all members (demo script, data, slides) |
+| WBS-17.1 | M | 1 | Level-of-effort: ~0.1 FTE over 10 weeks |
+| WBS-17.2 | M | 1 | Two reports plus customer notes (~0.2 FTE over 5 weeks) |
+| WBS-17.3 | M | 1 | Design report coordination and review (~0.33 FTE over 3 weeks) |
+| WBS-17.4 | S | 0.5 | Level-of-effort shared by all module owners |
 | **Total** | \- | **32.25** | Core scope only, optional WBS-18.1 is excluded |
 
 **Estimation method:**  
-Each WBS activity was first sized relatively (T–XL) by the activity owner and agreed in a team meeting, comparing it against the other activities. Sizes were converted to work content using the fixed scale above, giving 32.25 weeks of total work. Each team member is available at about 0.3 FTE, so human capacity is approx. 6 members × 10 weeks × 0.3 FTE \= 18 human-weeks. The remaining work is delegated to AI agents (Claude Code, ChatGPT). We therefore assume an AI factor of 0.45, so the total human effort is approx.17.7 human-weeks. This includes the time to write prompts and to review, test and fix AI output, since all AI-generated code goes through a pull-request review by a team member. Activities needing design judgement, integration or new technology depend less on AI in practice, which the team will monitor weekly.
+Each WBS activity was first sized relatively (T–XL) by the activity owner using the sizing criteria above and agreed in a team meeting, comparing it against the reference activities. Sizes were converted to work content using the fixed scale above, giving 32.25 weeks of total work. Each team member is available at about 0.3 FTE, so human capacity is approx. 6 members × 10 weeks × 0.3 FTE \= 18 human-weeks. The remaining work is delegated to AI agents (Claude Code, ChatGPT). We therefore assume an AI factor of 0.55: human effort \= work content × 0.55, so the total human effort is approx.17.7 human-weeks. This includes the time to write prompts and to review, test and fix AI output, since all AI-generated code goes through a pull-request review by a team member. Activities needing design judgement, integration or new technology depend less on AI in practice, which the team will monitor weekly.
 
 **Effort versus duration:** Duration \= effort / allocated FTE. For example, WBS-5.1 with A at 0.5 FTE takes 2 weeks. Scheduling in Section 5 accounts for availability and dependencies.
 
@@ -246,8 +258,9 @@ Allocation \= average FTE of that member during the activity's scheduled duratio
 | WBS-1.1 | B | Set up repo, protection rules, project board | 0.5 |
 | WBS-1.2 | B | Build CI pipeline | 0.25 |
 | WBS-1.3 | B | Provision Azure services | 0.25 |
-| WBS-1.4 | A | Catalogue/media models, Django skeleton | 0.25 |
+| WBS-1.4 | A | Catalogue/media models, Django skeleton | 0.125 |
 | WBS-1.4 | C | User/role models | 0.25 |
+| WBS-1.4 | E | ListeningEvent model | 0.125 |
 | WBS-1.5 | B | Layout, routing, API client | 0.25 |
 | WBS-2.1 | C | Auth endpoints and tests | 0.5 |
 | WBS-2.2 | C | Login/registration pages | 0.25 |
@@ -260,12 +273,14 @@ Allocation \= average FTE of that member during the activity's scheduled duratio
 | WBS-7.2 | A | Homepage/catalogue/search pages (lead) | 0.25 |
 | WBS-7.2 | E | Page implementation support | 0.25 |
 | WBS-8.1 | A | Streaming API | 0.5 |
-| WBS-8.2 | A | Player UI (lead) | 0.25 |
-| WBS-8.2 | B | Player integration with frontend foundation | 0.25 |
+| WBS-8.2 | A | Player UI design and review (lead) | 0.125 |
+| WBS-8.2 | B | Player implementation and integration with frontend foundation | 0.375 |
 | WBS-9.1 | D | Room API | 0.5 |
-| WBS-9.2 | D | Room UI (lead) | 0.25 |
+| WBS-9.2 | D | Room UI (lead) | 0.125 |
 | WBS-9.2 | E | Room UI implementation support | 0.25 |
-| WBS-10.1 | D | WebSocket and presence | 0.5 |
+| WBS-9.2 | B | Room UI integration with frontend foundation | 0.125 |
+| WBS-10.1 | D | WebSocket consumers and presence | 0.375 |
+| WBS-10.1 | B | WebSocket server (ASGI) deployment configuration on Azure | 0.125 |
 | WBS-10.2 | D | Chat backend and UI | 0.5 |
 | WBS-11.1 | D | WebRTC spike | 0.5 |
 | WBS-11.2 | D | Synchronization logic (lead) | 1.0 |
@@ -288,8 +303,24 @@ Allocation \= average FTE of that member during the activity's scheduled duratio
 | WBS-17.1 | A | Meetings, board, risk tracking | 0.1 |
 | WBS-17.2 | C | Requirements reports, customer notes | 0.2 |
 | WBS-17.3 | F | Design report coordination and review | 0.33 |
-| WBS-17.4 | A, B, C, D, E, F | Module documentation (F reviews consistency) | \~0.03 each |
+| WBS-17.4 | A, B, C, D, E, F | Module documentation (F reviews consistency) | \~0.04 each |
 | WBS-18.1 *(optional)* | E, F | AI evaluation and prototype | 0.5 each (only if approved) |
+
+### 4.3 Workload Distribution per Member
+
+Work content per member = Σ (allocation × scheduled duration) over Section 4.2, so the six rows add up to the 32.25 man-weeks of Section 3. Human effort applies the AI factor of 0.55. Capacity is 10 weeks × 0.3–0.4 FTE = 3–4 human-weeks per member.
+
+| Member | Lead activities | Support / shared activities | Work content (man-weeks) | Share of total | Human effort (× 0.55) |
+| :---- | :---- | :---- | :---- | :---- | :---- |
+| A – Şevval Tüfekçi | WBS-5.1, 6.1, 7.1, 7.2, 8.1, 8.2, 17.1, 16.2 (coord.) | WBS-1.4, 11.2, 15.2, 17.4 | 6.0 | 18.6% | 3.30 |
+| B – Lara Doğan | WBS-1.1, 1.2, 1.3, 1.5, 16.1 | WBS-8.2, 9.2, 10.1, 11.2, 15.3, 15.2, 16.2, 17.4 | 5.0 | 15.5% | 2.75 |
+| C – Sudenaz Hasret | WBS-2.1, 2.2, 3.1, 4.1, 4.2, 17.2 | WBS-1.4, 15.2, 16.2, 17.4 | 5.0 | 15.5% | 2.75 |
+| D – M. Kağan Temur | WBS-9.1, 9.2, 10.1, 10.2, 11.1, 11.2, 15.1, 15.3 | WBS-15.2, 16.2, 17.4 | 6.0 | 18.6% | 3.30 |
+| E – Efe Arda Demir | WBS-12.1, 12.2, 13.1, 13.2 | WBS-1.4, 7.2, 9.2, 15.2, 16.2, 17.4 | 4.75 | 14.7% | 2.61 |
+| F – Ahmet Taha Angın | WBS-14.1, 14.2, 14.3, 17.3, 17.4 (review) | WBS-13.2, 15.2, 16.2 | 5.5 | 17.1% | 3.03 |
+| **Total** | | | **32.25** | **100%** | **17.74** |
+
+**Balance check:** The average is 5.4 man-weeks per member and every member lies within about ±12% of it (4.75–6.0). A and D are slightly above average because they also carry coordination roles (project management for A; test specification and system testing for D). Every member's human effort (2.6–3.3 human-weeks) fits within the 3–4 human-week capacity. Every member also leads at least one development workstream, writes tests for their own module (WBS-15.2) and documents it (WBS-17.4).
 
 **Availability or allocation constraints:**
 
@@ -397,9 +428,28 @@ flowchart LR
 **Total project schedule:** **10 weeks**, from **2026-10-19** to **2026-12-28**.
 
 **Critical-path explanation:**  
-The critical path is the longest chain of dependent activities through the PERT network, activities with zero slack form the path. The catalogue → storage → streaming → synchronized-playback chain is the longest because each step strictly needs the previous one, and it feeds the release gate. It ends on 18.12, leaving 21.12–28.12 for system testing, release, demo and presentation. Near-critical paths: auth & profiles (C) and mobile (F) end on 11.12 and 18.12 respectively, so they have about one week and zero-to-few days of slack. Any delay on the critical path directly delays the codebase deadline, so these activities are reviewed first in every weekly meeting.
+The critical path is the longest chain of dependent activities through the PERT network, calculated with a forward pass (earliest start/finish) and backward pass (latest start/finish); activities with zero slack form the path. The catalogue → storage → streaming → synchronized-playback chain is the longest because each step strictly needs the previous one, and it feeds the release gate. It ends on 18.12, leaving 21.12–28.12 for system testing, release, demo and presentation. Near-critical paths: auth & profiles (C) and mobile (F) end on 11.12 and 18.12 respectively, so they have about one week and zero-to-few days of slack. Any delay on the critical path directly delays the codebase deadline, so these activities are reviewed first in every weekly meeting.
 
-### 5.3 Gantt Chart — Project Timeline
+### 5.3 Weekly Assignment Table
+
+Activities each member works on in each week, taken from the Gantt chart in 5.4 and the allocations in 4.2. Continuous level-of-effort work is not repeated in every cell: WBS-17.1 project management (A, weeks 1–10), WBS-15.2 module tests (all, weeks 3–9) and WBS-17.4 module documentation (all, weeks 8–9).
+
+| Week | Dates | A – Şevval | B – Lara | C – Sudenaz | D – Kağan | E – Efe Arda | F – Ahmet Taha |
+| :---- | :---- | :---- | :---- | :---- | :---- | :---- | :---- |
+| 1 | 19.10–25.10 | 17.1 Project kick-off & board | 1.1 Repo & branching; 1.3 Azure provisioning | 17.2 Requirement reports | 15.1 Test specification | – \* | – \* |
+| 2 | 26.10–01.11 | 1.4 Catalogue models & Django skeleton | 1.2 CI pipeline; 1.3 Azure provisioning; 1.5 Frontend foundation | 1.4 User/role models; 17.2 Requirement reports | 11.1 WebRTC spike | 1.4 ListeningEvent model | – \* |
+| 3 | 02.11–08.11 | 1.4 Catalogue models & Django skeleton | 1.2 CI pipeline; 1.5 Frontend foundation | 1.4 User/role models; 17.2 Requirement reports | 11.1 WebRTC spike | 1.4 ListeningEvent model | 14.1 Mobile setup |
+| 4 | 09.11–15.11 | 5.1 Catalogue API | 15.2 Foundation tests & CI upkeep \* | 2.1 Auth API; 17.2 Requirement reports | 9.1 Room API | 12.1 Event collection | 14.2 Mobile screens |
+| 5 | 16.11–22.11 | 5.1 Catalogue API; 7.1 Search API | 10.1 WebSocket deployment config | 2.1 Auth API; 2.2 Auth UI; 17.2 Requirement reports | 10.1 WebSocket & presence | 12.2 Analytics API | 14.2 Mobile screens; 17.3 Design spec |
+| 6 | 23.11–29.11 | 6.1 Media upload & storage; 7.1 Search API | 10.1 WebSocket deployment config | 2.2 Auth UI; 3.1 RBAC | 10.1 WebSocket & presence | 12.2 Analytics API | 14.2 Mobile screens; 17.3 Design spec |
+| 7 | 30.11–06.12 | 6.1 Media upload & storage; 7.2 Catalogue pages | 9.2 Room UI integration | 4.1 Profile API | 9.2 Room UI; 10.2 Chat | 7.2 Catalogue pages; 9.2 Room UI | 14.2 Mobile screens; 17.3 Design spec |
+| 8 | 07.12–13.12 | 7.2 Catalogue pages; 8.1 Streaming API; 8.2 Player UI | 8.2 Player UI; 9.2 Room UI integration | 4.2 Profile UI | 9.2 Room UI; 10.2 Chat | 7.2 Catalogue pages; 9.2 Room UI; 13.1 Dashboard UI | 14.3 Mobile integration |
+| 9 | 14.12–20.12 | 8.2 Player UI; 11.2 Synchronized playback | 8.2 Player UI; 11.2 STUN/TURN configuration | 15.2 Module tests; 17.4 Module documentation | 11.2 Synchronized playback | 13.1 Dashboard UI; 13.2 UI integration | 13.2 UI integration; 14.3 Mobile integration |
+| 10 | 21.12–28.12 | 16.2 Demo & presentation (coord.) | 15.3 Regression runs; 16.1 Release v1.0; 16.2 Demo | 16.2 Demo & presentation | 15.3 System testing; 16.2 Demo | 16.2 Demo & presentation | 16.2 Demo & presentation |
+
+\* No feature activity is scheduled for this member in this week. The time goes to input for the Requirement Specification report (due 02.11, coordinated by C under WBS-17.2) and onboarding to the stack in weeks 1–2, and to foundation tests and CI upkeep for B in week 4; it also serves as buffer for risk R-08.
+
+### 5.4 Gantt Chart — Project Timeline
 
 ```mermaid
 gantt
@@ -417,7 +467,7 @@ gantt
     Demo                           :milestone, m7, 2026-12-26, 0d
     Presentation                   :milestone, m8, 2026-12-28, 0d
 
-    section Foundation (B, A, C)
+    section Foundation (B, A, C, E)
     WBS-1.1 Repo & branching       :crit, w11, 2026-10-19, 1w
     WBS-1.3 Azure provisioning     :w13, 2026-10-19, 2w
     WBS-1.2 CI pipeline            :w12, 2026-10-26, 2w
