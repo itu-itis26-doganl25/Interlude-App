@@ -1,0 +1,18 @@
+# Local services only — the Django app runs on your machine.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: interlude
+      POSTGRES_USER: interlude
+      POSTGRES_PASSWORD: interlude
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+
+  azurite:  # local Azure Blob Storage emulator
+    image: mcr.microsoft.com/azure-storage/azurite
+    command: azurite-blob --blobHost 0.0.0.0 --loose
+    ports: ["10000:10000"]
+
+volumes:
+  pgdata:
