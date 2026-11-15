@@ -5,3 +5,4 @@ django-environ>=0.11
 django-storages[azure]>=1.14
 argon2-cffi>=23.1
 psycopg[binary]>=3.2
+djangorestframework-simplejwt>=5.3
