@@ -2,6 +2,13 @@ import pytest
 
 from apps.accounts.models import User
 
+# fixture part means that this function prepares something tests can ask for by name. global var like
+# created individually and only when asked for, and then cleaned after
+@pytest.fixture(autouse=True)
+def no_https_redirect(settings):
+    """CI runs with DEBUG off, which turns on the HTTPS redirect; the test client uses http."""
+    settings.SECURE_SSL_REDIRECT = False
+
 
 @pytest.fixture(autouse=True)
 def in_memory_storage(settings):
