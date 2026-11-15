@@ -53,3 +53,7 @@ export const typography = {
 
 export const theme = { colors, spacing, radius, typography } as const;
 export type Theme = typeof theme;
+
+export const artworkPalette = [
+  '#4C1D95', '#0E7490', '#9D174D', '#166534', '#92400E', '#1E3A8A',
+] as const;
