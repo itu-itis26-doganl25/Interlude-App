@@ -1,65 +1,55 @@
-/**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://unistyl.es/), etc.
- */
+import { Platform, TextStyle } from 'react-native';
 
-import '@/global.css';
+export const colors = {
+  background: '#0B0B0F',
+  surface: '#15151C',
+  surfaceElevated: '#1E1E28',
+  border: '#2A2A36',
 
-import { Platform } from 'react-native';
+  textPrimary: '#FFFFFF',
+  textSecondary: '#B3B3C2',
+  textMuted: '#6E6E80',
 
-export const Colors = {
-  light: {
-    text: '#000000',
-    background: '#ffffff',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
-    textSecondary: '#60646C',
-  },
-  dark: {
-    text: '#ffffff',
-    background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
-    textSecondary: '#B0B4BA',
-  },
+  primary: '#8B5CF6',
+  primaryPressed: '#7444E0',
+  onPrimary: '#FFFFFF',
+  accent: '#22D3EE',
+
+  danger: '#F87171',
+  dangerSurface: 'rgba(248,113,113,0.12)',
+  success: '#4ADE80',
+
+  overlay: 'rgba(0,0,0,0.6)',
+  transparent: 'transparent',
 } as const;
 
-export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
-
-export const Fonts = Platform.select({
-  ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
-    sans: 'system-ui',
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
-    serif: 'ui-serif',
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
-    rounded: 'ui-rounded',
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
-    mono: 'ui-monospace',
-  },
-  default: {
-    sans: 'normal',
-    serif: 'serif',
-    rounded: 'normal',
-    mono: 'monospace',
-  },
-  web: {
-    sans: 'var(--font-display)',
-    serif: 'var(--font-serif)',
-    rounded: 'var(--font-rounded)',
-    mono: 'var(--font-mono)',
-  },
-});
-
-export const Spacing = {
-  half: 2,
-  one: 4,
-  two: 8,
-  three: 16,
-  four: 24,
-  five: 32,
-  six: 64,
+export const spacing = {
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 24,
+  xxl: 32,
+  xxxl: 48,
 } as const;
 
-export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
-export const MaxContentWidth = 800;
+export const radius = {
+  sm: 8,
+  md: 12,
+  lg: 16,
+  pill: 999,
+} as const;
+
+const fontFamily = Platform.select({ ios: 'System', default: 'sans-serif' });
+
+export const typography = {
+  display: { fontFamily, fontSize: 34, fontWeight: '800', letterSpacing: -0.5 },
+  title: { fontFamily, fontSize: 22, fontWeight: '700' },
+  subtitle: { fontFamily, fontSize: 17, fontWeight: '600' },
+  body: { fontFamily, fontSize: 15, fontWeight: '400' },
+  label: { fontFamily, fontSize: 13, fontWeight: '600', letterSpacing: 0.3 },
+  caption: { fontFamily, fontSize: 12, fontWeight: '400' },
+} satisfies Record<string, TextStyle>;
+
+export const theme = { colors, spacing, radius, typography } as const;
+export type Theme = typeof theme;
