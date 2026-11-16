@@ -8,7 +8,7 @@ import { colors } from '@/constants/theme';
 SplashScreen.preventAutoHideAsync();
 
 function RootNavigator() {
-  const { status } = useAuth();
+  const { status, user } = useAuth();
   const router = useRouter();
   const prevStatus = useRef(status);
 
@@ -45,6 +45,9 @@ function RootNavigator() {
           <Stack.Screen name="user/[id]" options={headerOptions} />
           <Stack.Screen name="connections" options={headerOptions} />
           <Stack.Screen name="user-search" options={{ ...headerOptions, headerTitle: 'Find people' }} />
+        </Stack.Protected>
+        <Stack.Protected guard={isAuthed && user?.role === 'musician'}>
+          <Stack.Screen name="studio" options={{ ...headerOptions, headerTitle: 'Studio' }} />
         </Stack.Protected>
         <Stack.Protected guard={!isAuthed}>
           <Stack.Screen name="(auth)" />

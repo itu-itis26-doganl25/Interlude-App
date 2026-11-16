@@ -158,7 +158,7 @@ export function ProfileView({ userId, withTopInset }: Props) {
       {/* Musician: Studio özeti (sadece kendi profilinde) */}
       {profile.studioSummary && (
         <View style={styles.padded}>
-          <StudioSummaryCard summary={profile.studioSummary} onPress={noop /* TODO: /studio */} />
+          <StudioSummaryCard summary={profile.studioSummary} onPress={() => router.push('/studio')} />
         </View>
       )}
 
