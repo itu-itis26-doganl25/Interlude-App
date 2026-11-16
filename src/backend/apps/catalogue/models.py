@@ -68,8 +68,22 @@ class Album(TimeStampedModel):
     def __str__(self) -> str:
         return self.title
 
+class SongQuerySet(models.QuerySet):
+    def visible_to(self, user):
+        """
+        Published songs for everyone; a musician also sees their own drafts;
+        admins see everything. Every read path in the API goes through this.
+        """
+        qs = self.select_related("artist", "album")
+        if not user.is_authenticated:
+            return qs.filter(is_published=True)
+        if user.is_platform_admin:
+            return qs
+        return qs.filter(models.Q(is_published=True) | models.Q(artist=user))
+
 
 class Song(TimeStampedModel):
+    objects = SongQuerySet.as_manager()
     title = models.CharField(max_length=200)
     artist = models.ForeignKey(
         settings.AUTH_USER_MODEL,

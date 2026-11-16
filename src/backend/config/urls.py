@@ -2,13 +2,8 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.http import JsonResponse
-<<<<<<< Updated upstream
-from django.urls import path
-=======
 from django.urls import include, path
->>>>>>> Stashed changes
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
-
 
 def health(request):
     """Liveness check used by CI smoke tests and Azure health probes."""
