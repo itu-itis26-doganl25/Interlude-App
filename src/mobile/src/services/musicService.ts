@@ -26,13 +26,13 @@ export interface MusicService {
 const delay = (ms = 600) => new Promise<void>((r) => setTimeout(r, ms));
 const now = new Date().toISOString();
 
-const artists: User[] = [
+export const artists: User[] = [
   { id: 'a1', email: 'nova@interlude.app', displayName: 'Nova Wave', avatarUrl: null, role: 'musician', createdAt: now },
   { id: 'a2', email: 'lumen@interlude.app', displayName: 'Lumen', avatarUrl: null, role: 'musician', createdAt: now },
   { id: 'a3', email: 'kaya@interlude.app', displayName: 'Kaya Dere', avatarUrl: null, role: 'musician', createdAt: now },
 ];
 
-const songs: Song[] = [
+export const songs: Song[] = [
   { id: 's1', title: 'Midnight Static', artistId: 'a1', artistName: 'Nova Wave', albumId: 'al1', coverUrl: null, durationMs: 214000, audioUrl: '', playCount: 1_240_000 },
   { id: 's2', title: 'Glass Horizon', artistId: 'a2', artistName: 'Lumen', albumId: 'al2', coverUrl: null, durationMs: 187000, audioUrl: '', playCount: 893_500 },
   { id: 's3', title: 'Bosphorus Nights', artistId: 'a3', artistName: 'Kaya Dere', albumId: 'al3', coverUrl: null, durationMs: 242000, audioUrl: '', playCount: 612_000 },
@@ -40,7 +40,7 @@ const songs: Song[] = [
   { id: 's5', title: 'Paper Planes', artistId: 'a2', artistName: 'Lumen', albumId: 'al2', coverUrl: null, durationMs: 173000, audioUrl: '', playCount: 301_200 },
 ];
 
-const albums: Album[] = [
+export const albums: Album[] = [
   { id: 'al1', title: 'Static Dreams', artistId: 'a1', artistName: 'Nova Wave', coverUrl: null, releaseDate: '2026-10-20', songIds: ['s1', 's4'] },
   { id: 'al2', title: 'Clear Skies', artistId: 'a2', artistName: 'Lumen', coverUrl: null, releaseDate: '2026-09-02', songIds: ['s2', 's5'] },
   { id: 'al3', title: 'Istanbul Sessions', artistId: 'a3', artistName: 'Kaya Dere', coverUrl: null, releaseDate: '2026-11-01', songIds: ['s3'] },

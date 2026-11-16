@@ -31,6 +31,7 @@ export interface AuthService {
   logout(): Promise<void>;
   /** Called on app start; resolve null when there is no stored session. */
   restoreSession(): Promise<AuthSession | null>;
+  deleteAccount(): Promise<void>;
 }
 
 // ---------- Mock implementation ----------
@@ -81,4 +82,12 @@ export const mockAuthService: AuthService = {
     await delay(400);
     return currentSession;
   },
+
+    async deleteAccount() {
+    await delay();
+    currentSession = null;
+  },
 };
+
+/** Mock only: lets other mock services know who is logged in. */
+export const getMockSessionUser = () => currentSession?.user ?? null;

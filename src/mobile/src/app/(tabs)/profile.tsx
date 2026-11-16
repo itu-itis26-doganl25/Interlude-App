@@ -4,17 +4,12 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/providers/AuthProvider';
 import { colors, spacing, typography } from '@/constants/theme';
+import { ProfileView } from '@/components/profile/ProfileView';
 
-export default function ProfilePlaceholder() {
-  const { user, logout } = useAuth();
-  return (
-    <View style={styles.container}>
-      <Avatar uri={user?.avatarUrl ?? null} name={user?.displayName ?? ''} seed={user?.id ?? ''} size={96} />
-      <Text style={styles.name}>{user?.displayName}</Text>
-      <Text style={styles.role}>{user?.role}</Text>
-      <Button title="Log out" variant="secondary" onPress={logout} style={styles.button} />
-    </View>
-  );
+export default function ProfileScreen() {
+  const { user } = useAuth();
+  if (!user) return null;
+  return <ProfileView userId={user.id} withTopInset />;
 }
 
 const styles = StyleSheet.create({

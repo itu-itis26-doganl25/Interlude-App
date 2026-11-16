@@ -10,6 +10,7 @@ interface AuthContextValue {
   login: (c: LoginCredentials) => Promise<void>;
   signUp: (p: SignUpPayload) => Promise<void>;
   logout: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -52,9 +53,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setStatus('unauthenticated');
   }, []);
 
+  const deleteAccount = useCallback(async () => {
+    await authService.deleteAccount();
+    setUser(null);
+    setStatus('unauthenticated');
+  }, []);
+
   const value = useMemo(
-    () => ({ status, user, login, signUp, logout }),
-    [status, user, login, signUp, logout],
+    () => ({ status, user, login, signUp, logout, deleteAccount }),
+    [status, user, login, signUp, logout, deleteAccount],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
