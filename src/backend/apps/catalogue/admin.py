@@ -5,10 +5,19 @@ from .models import Album, Song
 
 
 class SongInline(admin.TabularInline):
+    """
+    Read-only list of the album's songs. Songs need an artist and an audio file,
+    so they are added and edited on the Song page, not from here.
+    """
     model = Song
     extra = 0
     fields = ("track_number", "title", "is_published")
+    readonly_fields = fields
+    show_change_link = True
+    can_delete = False
 
+    def has_add_permission(self, request, obj=None):
+        return False
 
 @admin.register(Album)
 # Makes albums appear in the admin.
