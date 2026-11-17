@@ -6,7 +6,9 @@ import { userService } from '@/services';
 import { mockUseAuth } from '../helpers/auth';
 import { makeAlbum, makeProfile, makeSong, makeUser } from '../helpers/fixtures';
 import { mockRouter } from '../helpers/mockRouter';
+import { mockUsePlayer } from '../helpers/player';
 
+jest.mock('@/providers/PlayerProvider');
 jest.mock('@/providers/AuthProvider');
 jest.mock('@/services', () => ({
   ...jest.requireActual('@/services'),
@@ -31,7 +33,9 @@ const musicianProfile = makeProfile({
   studioSummary: { totalPlays: 2_540_000, last7Days: [100, 200, 300] },
 });
 
+let player: ReturnType<typeof mockUsePlayer>;
 beforeEach(() => {
+  player = mockUsePlayer();
   mockUseAuth({ user: me });
 });
 
@@ -96,6 +100,21 @@ describe('ProfileView – own listener profile', () => {
     await screen.findByText('Taha');
     await fireEvent.press(screen.getByRole('button', { name: 'Log out' }));
     expect(auth.logout).toHaveBeenCalled();
+  });
+
+  it('plays a recently played song with that list as the queue', async () => {
+    svc.getProfile.mockResolvedValue(listenerProfile);
+    await render(<ProfileView userId="u1" />);
+    await fireEvent.press(await screen.findByText('Recent Song'));
+    expect(player.play).toHaveBeenCalledWith(listenerProfile.recentlyPlayed[0], listenerProfile.recentlyPlayed);
+  });
+
+  it('plays a popular song with the popular songs as the queue', async () => {
+    mockUseAuth({ user: artist });
+    svc.getProfile.mockResolvedValue(musicianProfile);
+    await render(<ProfileView userId="a1" />);
+    await fireEvent.press(await screen.findByText('Popular Song'));
+    expect(player.play).toHaveBeenCalledWith(musicianProfile.popularSongs[0], musicianProfile.popularSongs);
   });
 });
 

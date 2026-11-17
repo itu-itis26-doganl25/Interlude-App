@@ -5,7 +5,9 @@ import { musicService } from '@/services';
 import { mockUseAuth } from '../helpers/auth';
 import { makeAlbum, makeRoom, makeSong, makeUser } from '../helpers/fixtures';
 import { mockRouter } from '../helpers/mockRouter';
+import { mockUsePlayer } from '../helpers/player';
 
+jest.mock('@/providers/PlayerProvider');
 jest.mock('@/providers/AuthProvider');
 jest.mock('@/services', () => ({
   ...jest.requireActual('@/services'),
@@ -19,8 +21,10 @@ const feed = {
   newReleases: [makeAlbum()],
 };
 const searchBox = () => screen.getByPlaceholderText('Songs, artists, albums, rooms');
+let player: ReturnType<typeof mockUsePlayer>;
 
 beforeEach(() => {
+  player = mockUsePlayer();
   mockUseAuth({ user: makeUser({ displayName: 'Taha' }) });
   svc.getBrowseFeed.mockResolvedValue(feed);
 });
@@ -91,5 +95,21 @@ describe('Home (Browse & Search)', () => {
     await screen.findByText('No results found.');
     await fireEvent.press(screen.getByLabelText('Clear search'));
     expect(await screen.findByText('Trending')).toBeOnTheScreen();
+  });
+
+  it('plays a trending song with the trending list as the queue', async () => {
+    await render(<BrowseScreen />);
+    await fireEvent.press(await screen.findByText('Midnight Static'));
+    expect(player.play).toHaveBeenCalledWith(feed.trendingSongs[0], feed.trendingSongs);
+  });
+
+  it('plays a song from the search results with the results as the queue', async () => {
+    const found = makeSong({ id: 's9', title: 'Nova Song' });
+    svc.search.mockResolvedValue({ songs: [found], albums: [], artists: [], rooms: [] });
+    await render(<BrowseScreen />);
+    await screen.findByText('Trending');
+    await fireEvent.changeText(searchBox(), 'nova');
+    await fireEvent.press(await screen.findByText('Nova Song'));
+    expect(player.play).toHaveBeenCalledWith(found, [found]);
   });
 });

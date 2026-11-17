@@ -1,5 +1,8 @@
 import type { LiveRoom, StudioAnalytics, UserProfile } from '@/services';
 import type { Album, Song, User } from '@/types/models';
+import type { Library } from '@/services';
+import type { QueueItem } from '@/providers/PlayerProvider';
+import type { Playlist } from '@/types/models';
 
 const iso = '2026-01-01T00:00:00.000Z';
 
@@ -85,4 +88,27 @@ export const makeAnalytics = (o: Partial<StudioAnalytics> = {}): StudioAnalytics
   },
   listenerCountries: [{ country: 'Turkey', listeners: 640, share: 0.46 }],
   ...o,
+});
+
+export const makePlaylist = (o: Partial<Playlist> = {}): Playlist => ({
+  id: 'p1',
+  name: 'Chill Mix',
+  ownerId: 'u1',
+  coverUrl: null,
+  songIds: ['s1', 's2'],
+  createdAt: iso,
+  ...o,
+});
+
+export const makeLibrary = (o: Partial<Library> = {}): Library => ({
+  likedSongs: [makeSong()],
+  savedAlbums: [makeAlbum()],
+  followedArtists: [makeUser({ id: 'a1', displayName: 'Nova Wave', role: 'musician' })],
+  playlists: [makePlaylist()],
+  ...o,
+});
+
+export const makeQueueItem = (song: Song = makeSong(), source: QueueItem['source'] = 'user'): QueueItem => ({
+  song,
+  source,
 });
