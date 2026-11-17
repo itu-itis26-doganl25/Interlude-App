@@ -1,8 +1,7 @@
 from django.contrib import admin
 from django.http import JsonResponse
-from django.urls import include, path
+from django.urls import path, include
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
-
 
 def health(request):
     """Liveness check used by CI smoke tests and Azure health probes."""
@@ -16,5 +15,7 @@ urlpatterns = [
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
     path("api/auth/", include("apps.accounts.urls")),  # WBS-2.1
     # Each app adds its own routes here as it is built, e.g.
-    # path("api/catalogue/", include("apps.catalogue.urls")),   # WBS-5.1
+    path("api/catalogue/", include("apps.catalogue.urls")),   # WBS-5.1
+    path("api-auth/", include("rest_framework.urls")),   # login/logout for the browsable API
+    # to try 
 ]

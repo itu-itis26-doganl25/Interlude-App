@@ -2,6 +2,11 @@ import pytest
 
 from apps.accounts.models import User
 
+@pytest.fixture(autouse=True)
+def no_https_redirect(settings):
+    """CI runs with DEBUG off, which turns on the HTTPS redirect; the test client uses http."""
+    settings.SECURE_SSL_REDIRECT = False
+
 
 @pytest.fixture(autouse=True)
 def in_memory_storage(settings):
@@ -26,3 +31,25 @@ def other_musician(db):
         username="artist2", email="artist2@example.com", password="pw-123456!",
         role=User.Role.MUSICIAN,
     )
+
+
+@pytest.fixture
+def listener(db):
+    return User.objects.create_user(
+        username="listener1", email="listener1@example.com", password="pw-123456!",
+    )
+
+
+@pytest.fixture
+def platform_admin(db):
+    return User.objects.create_user(
+        username="admin1", email="admin1@example.com", password="pw-123456!",
+        role=User.Role.ADMIN,
+    )
+
+
+@pytest.fixture
+def api_client():
+    from rest_framework.test import APIClient
+
+    return APIClient()
