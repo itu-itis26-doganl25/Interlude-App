@@ -24,6 +24,7 @@ import type { LiveRoom } from '@/services';
 import { useAuth } from '@/providers/AuthProvider';
 import { useRouter } from 'expo-router';
 import { Avatar } from '@/components/ui/Avatar';
+import { usePlayer } from '@/providers/PlayerProvider';
 
 // TODO (Player / Rooms adımları): gerçek navigasyon ve çalma
 const noop = () => {};
@@ -100,6 +101,9 @@ export default function BrowseScreen() {
 }
 
 function FeedView({ data, loading, error, retry }: ReturnType<typeof useBrowseFeed>) {
+  
+  const { play } = usePlayer();
+  
   if (loading && !data) return <ActivityIndicator style={styles.loader} color={colors.primary} />;
 
   if (error && !data) {
@@ -122,7 +126,7 @@ function FeedView({ data, loading, error, retry }: ReturnType<typeof useBrowseFe
       <View>
         <SectionHeader title="Trending" />
         {data.trendingSongs.map((s) => (
-          <SongRow key={s.id} song={s} onPress={noop} />
+          <SongRow key={s.id} song={s} onPress={(song) => play(song, data.trendingSongs)} />
         ))}
       </View>
 
@@ -137,6 +141,8 @@ function FeedView({ data, loading, error, retry }: ReturnType<typeof useBrowseFe
 }
 
 function SearchView({ results, loading, error }: ReturnType<typeof useSearch>) {
+  
+  const { play } = usePlayer();
   if (error) {
     return (
       <View style={styles.message}>
@@ -162,7 +168,9 @@ function SearchView({ results, loading, error }: ReturnType<typeof useSearch>) {
       {results.songs.length > 0 && (
         <View>
           <SectionHeader title="Songs" />
-          {results.songs.map((s) => <SongRow key={s.id} song={s} onPress={noop} />)}
+          {results.songs.map((s) => (
+            <SongRow key={s.id} song={s} onPress={(song) => play(song, results.songs)} />
+          ))}
         </View>
       )}
       {results.artists.length > 0 && (

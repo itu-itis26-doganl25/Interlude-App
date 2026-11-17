@@ -50,3 +50,12 @@ export interface ListeningEvent {
   startedAt: string;
   durationListenedMs: number;
 }
+
+export interface Playlist {
+  id: string;
+  name: string;
+  ownerId: string;
+  coverUrl: string | null;
+  songIds: string[];
+  createdAt: string;
+}

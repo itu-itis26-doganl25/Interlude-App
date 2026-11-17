@@ -65,10 +65,20 @@ describe('LibraryProvider', () => {
 
   it('knows which songs are liked', async () => {
     const { result } = await renderHook(() => useLibrary(), { wrapper });
-    expect(result.current.isLiked('s1')).toBe(false); // henüz yüklenmedi
     await waitFor(() => expect(result.current.library).not.toBeNull());
     expect(result.current.isLiked('s1')).toBe(true);
     expect(result.current.isLiked('s9')).toBe(false);
+  });
+
+  it('reports nothing as liked until the library has loaded', async () => {
+    const d = deferred<ReturnType<typeof makeLibrary>>();
+    svc.getLibrary.mockReturnValue(d.promise);
+    const { result } = await renderHook(() => useLibrary(), { wrapper });
+    expect(result.current.isLiked('s1')).toBe(false);
+    await act(async () => {
+      d.resolve(makeLibrary({ likedSongs: [liked] }));
+    });
+    await waitFor(() => expect(result.current.isLiked('s1')).toBe(true));
   });
 
   it('likes optimistically and puts the song first', async () => {

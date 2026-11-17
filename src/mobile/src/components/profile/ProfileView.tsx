@@ -25,6 +25,7 @@ import { useProfile } from '@/hooks/use-profile';
 import { useAuth } from '@/providers/AuthProvider';
 import type { ConnectionKind } from '@/services';
 import { formatCount } from '@/utils/format';
+import { usePlayer } from '@/providers/PlayerProvider';
 
 // TODO (Player / Studio adımları): gerçek navigasyon ve çalma
 const noop = () => {};
@@ -40,6 +41,7 @@ export function ProfileView({ userId, withTopInset }: Props) {
   const { user: me, logout, deleteAccount } = useAuth();
   const { profile, loading, error, retry, toggleFollow } = useProfile(userId);
   const isSelf = me?.id === userId;
+  const { play } = usePlayer();
 
   const confirmDelete = () =>
   Alert.alert(
@@ -166,7 +168,9 @@ export function ProfileView({ userId, withTopInset }: Props) {
       {profile.popularSongs.length > 0 && (
         <View>
           <SectionHeader title="Popular songs" />
-          {profile.popularSongs.map((s) => <SongRow key={s.id} song={s} onPress={noop} />)}
+          {profile.popularSongs.map((s) => (
+            <SongRow key={s.id} song={s} onPress={(song) => play(song, profile.popularSongs)} />
+          ))}
         </View>
       )}
       {profile.albums.length > 0 && (
@@ -180,7 +184,9 @@ export function ProfileView({ userId, withTopInset }: Props) {
       {profile.recentlyPlayed.length > 0 && (
         <View>
           <SectionHeader title="Recently played" />
-          {profile.recentlyPlayed.map((s) => <SongRow key={s.id} song={s} onPress={noop} />)}
+          {profile.recentlyPlayed.map((s) => (
+            <SongRow key={s.id} song={s} onPress={(song) => play(song, profile.recentlyPlayed)} />
+          ))}
         </View>
       )}
       {profile.followedArtists.length > 0 && (

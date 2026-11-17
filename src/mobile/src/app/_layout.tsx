@@ -4,6 +4,8 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { AuthProvider, useAuth } from '@/providers/AuthProvider';
 import { colors } from '@/constants/theme';
+import { LibraryProvider } from '@/providers/LibraryProvider';
+import { PlayerProvider } from '@/providers/PlayerProvider';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -45,6 +47,7 @@ function RootNavigator() {
           <Stack.Screen name="user/[id]" options={headerOptions} />
           <Stack.Screen name="connections" options={headerOptions} />
           <Stack.Screen name="user-search" options={{ ...headerOptions, headerTitle: 'Find people' }} />
+          <Stack.Screen name="player" options={{ presentation: 'modal', headerShown: false }} />
         </Stack.Protected>
         <Stack.Protected guard={isAuthed && user?.role === 'musician'}>
           <Stack.Screen name="studio" options={{ ...headerOptions, headerTitle: 'Studio' }} />
@@ -60,7 +63,11 @@ function RootNavigator() {
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <RootNavigator />
+      <LibraryProvider>
+        <PlayerProvider>
+          <RootNavigator />
+        </PlayerProvider>
+      </LibraryProvider>
     </AuthProvider>
   );
 }

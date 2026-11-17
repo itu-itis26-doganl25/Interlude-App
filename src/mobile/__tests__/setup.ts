@@ -42,3 +42,7 @@ jest.mock('react-native-svg', () => {
 beforeEach(() => {
   jest.clearAllMocks();
 });
+
+jest.mock('react-native-safe-area-context', () =>
+  require('react-native-safe-area-context/jest/mock').default,
+);
