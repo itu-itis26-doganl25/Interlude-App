@@ -44,7 +44,7 @@ DJANGO_APPS = [
 ]
 THIRD_PARTY_APPS = [
     "rest_framework",
-    "rest_framework_simplejwt.token_blacklist",
+    "django_filters",
     "drf_spectacular",
     "storages",
 ]
