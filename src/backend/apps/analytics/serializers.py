@@ -169,6 +169,7 @@ class RangeSerializer(serializers.Serializer):
     start = serializers.DateField()
     end = serializers.DateField()
     interval = serializers.CharField()
+    tz = serializers.CharField(help_text="Time zone the dates and periods are in.")
 
 
 class DashboardSerializer(serializers.Serializer):

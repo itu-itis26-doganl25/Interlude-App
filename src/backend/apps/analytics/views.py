@@ -1,4 +1,5 @@
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status
 from rest_framework.exceptions import PermissionDenied
@@ -141,7 +142,12 @@ class PlaybackStateView(APIView):
 
 
 def _range_payload(query: dict) -> dict:
-    return {"start": query["start"], "end": query["end"], "interval": query["interval"].value}
+    return {
+        "start": query["start"],
+        "end": query["end"],
+        "interval": query["interval"].value,
+        "tz": timezone.get_current_timezone_name(),
+    }
 
 
 class DashboardView(APIView):
@@ -175,7 +181,9 @@ class SongStatsView(APIView):
 
     @extend_schema(parameters=[StatsQuerySerializer], responses=SongStatsSerializer)
     def get(self, request: Request, song_id: int) -> Response:
-        song = get_object_or_404(Song, pk=song_id)
+        # Drafts the user cannot see are 404, so their existence is not revealed;
+        # another musician's published track is 403 as FR-39 specifies.
+        song = get_object_or_404(Song.objects.visible_to(request.user), pk=song_id)
         if song.artist_id != request.user.id:
             raise PermissionDenied("You can only view statistics for your own tracks.")
 

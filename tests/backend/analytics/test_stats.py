@@ -46,7 +46,7 @@ def test_dashboard_counts_and_ranking_match_known_dataset(api_client, musician, 
 
     data = api_client.get(DASHBOARD, RANGE).json()
 
-    assert data["range"] == {**RANGE, "interval": "day"}
+    assert data["range"] == {**RANGE, "interval": "day", "tz": "Europe/Istanbul"}
     assert data["total_plays"] == 4
     assert [(t["title"], t["plays"], t["skips"], t["completions"]) for t in data["tracks"]] == [
         ("Alpha", 3, 1, 1),
@@ -90,14 +90,14 @@ def test_time_range_filters_every_figure(api_client, musician, catalogue):
     assert data["plays_over_time"] == [{"period": "2026-11-03", "plays": 1}]
 
 
-def test_default_range_is_last_30_days(api_client, musician):
+def test_default_range_is_last_30_days(api_client, musician, monkeypatch):
+    # Frozen "today" so the test cannot flake around midnight.
+    monkeypatch.setattr(timezone, "localdate", lambda *a, **kw: date(2026, 11, 19))
     api_client.force_authenticate(musician)
-    today = timezone.localdate()
 
     data = api_client.get(DASHBOARD).json()
 
-    assert data["range"]["end"] == str(today)
-    assert data["range"]["start"] == str(today - timedelta(days=29))
+    assert (data["range"]["start"], data["range"]["end"]) == ("2026-10-21", "2026-11-19")
     assert len(data["plays_over_time"]) == 30
 
 
@@ -169,6 +169,31 @@ def test_musician_cannot_read_another_musicians_track(api_client, musician, cata
     response = api_client.get(song_url(catalogue["foreign"].id), RANGE)
     assert response.status_code == 403
     assert "plays" not in response.json()
+
+
+def test_another_musicians_draft_is_not_revealed(api_client, musician, other_musician, make_song):
+    draft = make_song(other_musician, "Unreleased", published=False)
+    api_client.force_authenticate(musician)
+    assert api_client.get(song_url(draft.id)).status_code == 404
+
+
+def test_own_draft_statistics_are_available(api_client, musician, make_song):
+    draft = make_song(musician, "Demo", published=False)
+    api_client.force_authenticate(musician)
+    assert api_client.get(song_url(draft.id)).status_code == 200
+
+
+def test_dashboard_query_count_does_not_grow_with_tracks(
+    api_client, musician, listener, make_song, make_event, django_assert_max_num_queries
+):
+    for i in range(10):
+        make_event(make_song(musician, f"Song {i}"), listener, on=D1)
+    api_client.force_authenticate(musician)
+
+    with django_assert_max_num_queries(4):
+        response = api_client.get(DASHBOARD, RANGE)
+
+    assert response.json()["total_plays"] == 10
 
 
 def test_listener_cannot_read_track_stats(api_client, listener, catalogue):

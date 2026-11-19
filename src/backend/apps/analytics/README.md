@@ -50,7 +50,7 @@ Query params (all optional): `start`, `end` (inclusive `YYYY-MM-DD`, in
 ```json
 GET /api/analytics/dashboard/?start=2026-11-01&end=2026-11-07
 {
-  "range": {"start": "2026-11-01", "end": "2026-11-07", "interval": "day"},
+  "range": {"start": "2026-11-01", "end": "2026-11-07", "interval": "day", "tz": "Europe/Istanbul"},
   "total_plays": 4,
   "tracks": [
     {"song_id": 1, "title": "Alpha", "plays": 3, "skips": 1, "completions": 1},
@@ -66,8 +66,8 @@ GET /api/analytics/dashboard/?start=2026-11-01&end=2026-11-07
   period with empty periods as `0`; `period` is the first day of the day / week
   (Monday) / month, in local time.
 - `songs/<id>/` returns `range`, `track` (one `tracks` entry) and `plays_over_time`.
-- `401` when not logged in; listeners and other musicians' tracks get `403`; an
-  unknown track `404`. Responses contain only aggregates — no listener identifiers (NFR-18).
+- `401` when not logged in; listeners and other musicians' published tracks get
+  `403`; unknown tracks and other musicians' drafts `404` (existence is not revealed). Responses contain only aggregates — no listener identifiers (NFR-18).
 
 ### Offline events and playback recovery (FR-53)
 
