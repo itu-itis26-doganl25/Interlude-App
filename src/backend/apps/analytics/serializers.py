@@ -19,6 +19,8 @@ DEFAULT_RANGE_DAYS = 30
 MAX_EVENT_AGE = timedelta(days=7)
 MAX_CLOCK_SKEW = timedelta(minutes=5)
 MAX_BATCH_SIZE = 100
+# A 3-minute track on repeat gives 20 plays an hour; more is treated as inflation.
+PLAYS_PER_TRACK_PER_HOUR = 20
 
 
 def _check_position(song: Song, position: int) -> None:
@@ -28,7 +30,7 @@ def _check_position(song: Song, position: int) -> None:
         )
 
 
-class _PlayableSongMixin:
+class _PlayableSongMixin(serializers.Serializer):
     """Limits `song` to what the requesting user can play (catalogue visibility rule)."""
 
     def __init__(self, *args, **kwargs):
@@ -87,7 +89,28 @@ class ListeningEventSerializer(_PlayableSongMixin, serializers.ModelSerializer):
         occurred_at = attrs.pop("occurred_at", None)
         if occurred_at is not None:
             attrs["created_at"] = occurred_at
+        self._check_play_cap(attrs)
         return attrs
+
+    def _check_play_cap(self, attrs: dict) -> None:
+        """Anti-inflation: at most PLAYS_PER_TRACK_PER_HOUR plays of one track per user."""
+        request = self.context.get("request")
+        if request is None or attrs["event_type"] != ListeningEvent.EventType.PLAY:
+            return
+        mine = ListeningEvent.objects.filter(user=request.user)
+        if mine.filter(client_event_id=attrs["client_event_id"]).exists():
+            return  # a retry of a stored event is a duplicate, not a new play
+        at = attrs.get("created_at") or timezone.now()
+        recent_plays = mine.filter(
+            song=attrs["song"],
+            event_type=ListeningEvent.EventType.PLAY,
+            created_at__gt=at - timedelta(hours=1),
+            created_at__lte=at,
+        ).count()
+        if recent_plays >= PLAYS_PER_TRACK_PER_HOUR:
+            raise serializers.ValidationError(
+                {"event_type": "Play limit for this track reached; try again later."}
+            )
 
 
 class EventBatchSerializer(serializers.Serializer):

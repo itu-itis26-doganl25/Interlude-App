@@ -3,7 +3,7 @@ import { ApiError } from '../../src/lib/api/client';
 import {
   BATCH_SIZE,
   MAX_BUFFERED,
-  STORAGE_KEY,
+  pendingEventsKey,
   createEventQueue,
   type BatchResult,
   type QueuedEvent,
@@ -11,6 +11,7 @@ import {
 } from '../../src/lib/analytics/eventQueue';
 import { memoryStorage } from './memoryStorage';
 
+const USER = 7;
 const PLAY = { song: 12, event_type: 'play' as const };
 
 function ids() {
@@ -33,7 +34,7 @@ afterEach(() => {
 describe('listening-event queue (FR-53)', () => {
   it('keeps events in memory when localStorage is unusable', async () => {
     vi.stubGlobal('localStorage', {}); // present but without methods (blocked or a stub)
-    const queue = createEventQueue({
+    const queue = createEventQueue({ userId: USER, 
       send: vi.fn<SendBatch>(async () => { throw new TypeError('Failed to fetch'); }),
     });
 
@@ -44,7 +45,7 @@ describe('listening-event queue (FR-53)', () => {
 
   it('sends an event with an id and the time it happened', async () => {
     const send = vi.fn<SendBatch>(async (events) => accepted(events));
-    const queue = createEventQueue({ send, newId: ids(), now: () => new Date('2026-11-19T10:00:00Z') });
+    const queue = createEventQueue({ userId: USER,  send, newId: ids(), now: () => new Date('2026-11-19T10:00:00Z') });
 
     await queue.track({ ...PLAY, position_seconds: 3 });
 
@@ -60,7 +61,7 @@ describe('listening-event queue (FR-53)', () => {
       if (!online) throw new TypeError('Failed to fetch');
       return accepted(events);
     });
-    const queue = createEventQueue({ send, newId: ids() });
+    const queue = createEventQueue({ userId: USER,  send, newId: ids() });
 
     await queue.track(PLAY);
     await queue.track({ ...PLAY, event_type: 'complete' });
@@ -80,11 +81,11 @@ describe('listening-event queue (FR-53)', () => {
     const offline = vi.fn<SendBatch>(async () => {
       throw new TypeError('Failed to fetch');
     });
-    await createEventQueue({ send: offline, newId: ids() }).track(PLAY);
-    expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]')).toHaveLength(1);
+    await createEventQueue({ userId: USER,  send: offline, newId: ids() }).track(PLAY);
+    expect(JSON.parse(localStorage.getItem(pendingEventsKey(USER)) ?? '[]')).toHaveLength(1);
 
     const send = vi.fn<SendBatch>(async (events) => accepted(events));
-    const restarted = createEventQueue({ send });
+    const restarted = createEventQueue({ userId: USER,  send });
     const stop = restarted.start();
     await restarted.flush();
     stop();
@@ -99,7 +100,7 @@ describe('listening-event queue (FR-53)', () => {
       if (!online) throw new TypeError('Failed to fetch');
       return accepted(events);
     });
-    const queue = createEventQueue({ send });
+    const queue = createEventQueue({ userId: USER,  send });
     const stop = queue.start();
     await queue.track(PLAY);
     expect(queue.pending()).toHaveLength(1);
@@ -116,10 +117,10 @@ describe('listening-event queue (FR-53)', () => {
       { client_event_id: events[0].client_event_id, status: 'duplicate' },
       { client_event_id: events[1].client_event_id, status: 'rejected', errors: { song: ['x'] } },
     ]);
-    const queue = createEventQueue({ send: vi.fn<SendBatch>(async () => { throw new TypeError(); }), newId: ids() });
+    const queue = createEventQueue({ userId: USER,  send: vi.fn<SendBatch>(async () => { throw new TypeError(); }), newId: ids() });
     for (let i = 0; i < 3; i += 1) await queue.track(PLAY);
 
-    await createEventQueue({ send }).flush();
+    await createEventQueue({ userId: USER,  send }).flush();
 
     expect(queue.pending().map((e) => e.client_event_id)).toEqual(['id-3']);
   });
@@ -127,7 +128,7 @@ describe('listening-event queue (FR-53)', () => {
   it('keeps events on server errors and rate limits', async () => {
     for (const status of [401, 429, 500]) {
       localStorage.clear();
-      const queue = createEventQueue({
+      const queue = createEventQueue({ userId: USER, 
         send: vi.fn<SendBatch>(async () => { throw new ApiError(status, 'nope'); }),
       });
       await queue.track(PLAY);
@@ -137,7 +138,7 @@ describe('listening-event queue (FR-53)', () => {
 
   it('drops a batch the server says is malformed instead of retrying forever', async () => {
     const send = vi.fn<SendBatch>(async () => { throw new ApiError(400, 'bad'); });
-    const queue = createEventQueue({ send });
+    const queue = createEventQueue({ userId: USER,  send });
 
     await queue.track(PLAY);
 
@@ -146,10 +147,10 @@ describe('listening-event queue (FR-53)', () => {
 
   it('uploads in batches of the server limit', async () => {
     const sizes: number[] = [];
-    const offline = createEventQueue({ send: vi.fn<SendBatch>(async () => { throw new TypeError(); }), newId: ids() });
+    const offline = createEventQueue({ userId: USER,  send: vi.fn<SendBatch>(async () => { throw new TypeError(); }), newId: ids() });
     for (let i = 0; i < BATCH_SIZE + 5; i += 1) await offline.track(PLAY);
 
-    await createEventQueue({
+    await createEventQueue({ userId: USER, 
       send: async (events) => {
         sizes.push(events.length);
         return accepted(events);
@@ -160,7 +161,7 @@ describe('listening-event queue (FR-53)', () => {
   });
 
   it('bounds the buffer by dropping the oldest events', async () => {
-    const queue = createEventQueue({ send: vi.fn<SendBatch>(async () => { throw new TypeError(); }), newId: ids() });
+    const queue = createEventQueue({ userId: USER,  send: vi.fn<SendBatch>(async () => { throw new TypeError(); }), newId: ids() });
     for (let i = 0; i < MAX_BUFFERED + 2; i += 1) await queue.track(PLAY);
 
     const pending = queue.pending();
@@ -173,7 +174,7 @@ describe('listening-event queue (FR-53)', () => {
     const send = vi.fn<SendBatch>(
       (events) => new Promise((resolve) => { release = () => resolve(accepted(events)); }),
     );
-    const queue = createEventQueue({ send, newId: ids() });
+    const queue = createEventQueue({ userId: USER,  send, newId: ids() });
     const first = queue.track(PLAY);
     const second = queue.flush();
 
@@ -181,5 +182,16 @@ describe('listening-event queue (FR-53)', () => {
     await Promise.all([first, second]);
 
     expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it("never sends another user's buffered events", async () => {
+    const offline = vi.fn<SendBatch>(async () => { throw new TypeError('Failed to fetch'); });
+    await createEventQueue({ userId: 'alice', send: offline }).track(PLAY);
+
+    const send = vi.fn<SendBatch>(async (events) => accepted(events));
+    await createEventQueue({ userId: 'bob', send }).flush();
+
+    expect(send).not.toHaveBeenCalled();
+    expect(createEventQueue({ userId: 'alice', send: offline }).pending()).toHaveLength(1);
   });
 });

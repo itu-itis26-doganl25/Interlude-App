@@ -8,7 +8,8 @@
  * after a lost response never creates duplicates on the server.
  *
  * Usage in the player (WBS-8.2):
- *   const queue = createEventQueue();
+ *   const queue = createEventQueue({ userId: session.userId });
+ *   // on logout: stop(); clearAnalyticsStorage(session.userId);
  *   const stop = queue.start();            // once, e.g. in the player provider
  *   queue.track({ song: 12, event_type: 'play', position_seconds: 0 });
  */
@@ -39,6 +40,9 @@ export interface BatchResult {
 export type SendBatch = (events: QueuedEvent[]) => Promise<BatchResult[]>;
 
 export interface EventQueueOptions {
+  /** The logged-in user. Buffers are per user so a shared device never sends
+   * one account's events as another's. */
+  userId: string | number;
   storage?: Storage;
   send?: SendBatch;
   newId?: () => string;
@@ -56,6 +60,10 @@ export interface EventQueue {
 }
 
 export const STORAGE_KEY = 'interlude.analytics.pendingEvents';
+
+export function pendingEventsKey(userId: string | number): string {
+  return `${STORAGE_KEY}:${userId}`;
+}
 /** Same limit as the backend (MAX_BATCH_SIZE). */
 export const BATCH_SIZE = 100;
 /** Bounded so a long offline period cannot fill localStorage; oldest are dropped. */
@@ -78,8 +86,9 @@ export function usableLocalStorage(): Storage | undefined {
   }
 }
 
-export function createEventQueue(options: EventQueueOptions = {}): EventQueue {
+export function createEventQueue(options: EventQueueOptions): EventQueue {
   const storage = options.storage ?? usableLocalStorage();
+  const key = pendingEventsKey(options.userId);
   const send = options.send ?? sendBatch;
   const newId = options.newId ?? (() => crypto.randomUUID());
   const now = options.now ?? (() => new Date());
@@ -89,7 +98,7 @@ export function createEventQueue(options: EventQueueOptions = {}): EventQueue {
   function read(): QueuedEvent[] {
     if (!storage) return memory;
     try {
-      const parsed: unknown = JSON.parse(storage.getItem(STORAGE_KEY) ?? '[]');
+      const parsed: unknown = JSON.parse(storage.getItem(key) ?? '[]');
       return Array.isArray(parsed) ? (parsed as QueuedEvent[]) : [];
     } catch {
       return [];
@@ -100,7 +109,7 @@ export function createEventQueue(options: EventQueueOptions = {}): EventQueue {
     memory = events;
     if (!storage) return;
     try {
-      storage.setItem(STORAGE_KEY, JSON.stringify(events));
+      storage.setItem(key, JSON.stringify(events));
     } catch {
       // Quota exceeded or storage disabled: keep the in-memory copy for this session.
     }

@@ -16,6 +16,7 @@ from .models import PlaybackState
 from .permissions import IsMusician
 from .recording import record_event
 from .serializers import (
+    MAX_BATCH_SIZE,
     DashboardSerializer,
     EventBatchResponseSerializer,
     EventBatchSerializer,
@@ -26,11 +27,40 @@ from .serializers import (
 )
 
 
+def _event_count(request: Request) -> int:
+    """Events carried by a request: 1 for a single event, the list size for a batch."""
+    events = request.data.get("events") if isinstance(request.data, dict) else None
+    if isinstance(events, list):
+        return max(1, min(len(events), MAX_BATCH_SIZE))
+    return 1
+
+
 class ListeningEventThrottle(UserRateThrottle):
-    """Caps event spam that would inflate play counts; generous for normal playback."""
+    """
+    Per-user budget of *events* (not requests) shared by the single and batch
+    endpoints, so batching cannot be used to inflate play counts. 120 events/min is
+    generous for real playback and still lets a full offline batch (100) through.
+    """
 
     scope = "listening_events"
     rate = "120/min"
+
+    def allow_request(self, request, view) -> bool:
+        if self.rate is None:
+            return True
+        self.key = self.get_cache_key(request, view)
+        if self.key is None:
+            return True
+        self.history = self.cache.get(self.key, [])
+        self.now = self.timer()
+        while self.history and self.history[-1] <= self.now - self.duration:
+            self.history.pop()
+        cost = _event_count(request)
+        if len(self.history) + cost > self.num_requests:
+            return self.throttle_failure()
+        self.history[:0] = [self.now] * cost
+        self.cache.set(self.key, self.history, self.duration)
+        return True
 
 
 class ListeningEventCreateView(APIView):
@@ -56,13 +86,6 @@ class ListeningEventCreateView(APIView):
         return Response(ListeningEventSerializer(event).data, status=code)
 
 
-class ListeningEventBatchThrottle(UserRateThrottle):
-    # The web queue sends every event through this endpoint (one code path for
-    # online and offline), so it must allow fast skipping.
-    scope = "listening_event_batches"
-    rate = "60/min"
-
-
 class ListeningEventBatchView(APIView):
     """
     FR-53: events buffered while offline are uploaded together on reconnection.
@@ -71,7 +94,7 @@ class ListeningEventBatchView(APIView):
     """
 
     permission_classes = [IsAuthenticated]
-    throttle_classes = [ListeningEventBatchThrottle]
+    throttle_classes = [ListeningEventThrottle]
 
     @extend_schema(request=EventBatchSerializer, responses=EventBatchResponseSerializer)
     def post(self, request: Request) -> Response:

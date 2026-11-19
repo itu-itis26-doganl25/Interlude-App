@@ -204,3 +204,58 @@ def test_recovery_log_can_be_cleared(api_client, listener, musician, make_song):
 
 def test_recovery_log_requires_login(api_client):
     assert api_client.get(STATE).status_code == 401
+
+
+# --- Abuse protection (security review) ---------------------------------------------
+
+
+def test_batches_and_single_events_share_one_event_budget(
+    api_client, listener, musician, make_song, monkeypatch
+):
+    """Batching must not multiply the per-user event limit."""
+    from apps.analytics.views import ListeningEventThrottle
+
+    monkeypatch.setattr(ListeningEventThrottle, "rate", "5/min")
+    songs = [make_song(musician, f"S{i}") for i in range(7)]
+    api_client.force_authenticate(listener)
+
+    first = api_client.post(BATCH, {"events": [event(s) for s in songs[:4]]}, format="json")
+    too_many = api_client.post(BATCH, {"events": [event(s) for s in songs[4:6]]}, format="json")
+    single = api_client.post(EVENTS, event(songs[6]), format="json")
+    last_slot = api_client.post(EVENTS, event(songs[6]), format="json")
+
+    assert (first.status_code, too_many.status_code) == (200, 429)
+    assert (single.status_code, last_slot.status_code) == (201, 429)
+    assert ListeningEvent.objects.count() == 5
+
+
+def test_server_keeps_its_own_receive_time(api_client, listener, musician, make_song):
+    when = timezone.now() - timedelta(days=2)
+    api_client.force_authenticate(listener)
+
+    api_client.post(EVENTS, event(make_song(musician), occurred_at=when.isoformat()), format="json")
+
+    stored = ListeningEvent.objects.get()
+    assert stored.created_at == when
+    assert timezone.now() - stored.received_at < timedelta(minutes=1)
+
+
+def test_plays_of_one_track_are_capped_per_hour(
+    api_client, listener, musician, make_song, monkeypatch
+):
+    from apps.analytics import serializers
+
+    monkeypatch.setattr(serializers, "PLAYS_PER_TRACK_PER_HOUR", 2)
+    song, other = make_song(musician, "A"), make_song(musician, "B")
+    api_client.force_authenticate(listener)
+    accepted = [api_client.post(EVENTS, event(song), format="json") for _ in range(2)]
+
+    over = api_client.post(EVENTS, event(song), format="json")
+    stored_id = str(accepted[0].data["client_event_id"])
+    retry = api_client.post(EVENTS, {**event(song), "client_event_id": stored_id}, format="json")
+    skip = api_client.post(EVENTS, event(song, "skip"), format="json")
+    other_track = api_client.post(EVENTS, event(other), format="json")
+
+    assert over.status_code == 400 and "event_type" in over.data
+    assert retry.status_code == 200  # a retry of a stored play is not a new play
+    assert (skip.status_code, other_track.status_code) == (201, 201)

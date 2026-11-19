@@ -37,8 +37,14 @@ POST /api/analytics/events/
   same rule as the catalogue). `room` may be any existing room, closed ones included,
   because events can arrive late; it only sets the `context`.
 - `400` for unknown/unplayable songs, unknown rooms, unknown event types or a
-  position beyond the track duration. `401` when not logged in. `429` above
-  120 events/minute per user.
+  position beyond the track duration. `401` when not logged in.
+- Abuse limits: **120 events/minute per user**, counted per event and shared by the
+  single and batch endpoints (`429` above it); at most **20 `play` events per user per
+  track per hour** (`400` on `event_type` above it — a retry of a stored play is still
+  a `duplicate`). Throttling uses Django's cache; production needs a shared cache
+  (Redis) so the limit holds across workers.
+- `created_at` is when playback happened (statistics use it); the server also stores
+  `received_at`, its own arrival time, which clients cannot set.
 - The response includes `context` (`"individual"` or `"room"`) and never the user.
 
 ### Statistics (musician dashboard)
@@ -74,14 +80,17 @@ GET /api/analytics/dashboard/?start=2026-11-01&end=2026-11-07
 **Use the web helpers** in `src/frontend/src/lib/analytics/` instead of calling these
 endpoints directly — they implement the buffering and retry rules below.
 
-- `eventQueue.ts` — `createEventQueue()`; `queue.start()` once, then
-  `queue.track({ song, event_type, position_seconds?, room? })` on play / skip / complete.
-  Events are stored in `localStorage` first, sent in batches, and kept when offline;
-  they are flushed on the browser `online` event and on the next start.
-- `playbackRecovery.ts` — `createPlaybackRecorder()`; `recorder.update(...)` on
-  `timeupdate` (server copy at most every 10 s), `recorder.flush()` on pause / track
-  change / `pagehide`; `loadResumePoint()` on start and on `online` to offer
-  "Resume at mm:ss"; `clearResumePoint()` when there is nothing left to resume.
+- `eventQueue.ts` — `createEventQueue({ userId })`; `queue.start()` once after login,
+  then `queue.track({ song, event_type, position_seconds?, room? })` on play / skip /
+  complete. Events are stored in `localStorage` first, sent in batches, and kept when
+  offline; they are flushed on the browser `online` event and on the next start.
+- `playbackRecovery.ts` — `createPlaybackRecorder({ userId })`; `recorder.update(...)`
+  on `timeupdate` (server copy at most every 10 s), `recorder.flush()` on pause / track
+  change / `pagehide`; `loadResumePoint(userId)` on start and on `online` to offer
+  "Resume at mm:ss"; `clearResumePoint(userId)` when there is nothing left to resume.
+- **Logout:** `await queue.flush()` while still logged in, then `stop()` and
+  `clearAnalyticsStorage(userId)`. Local data is kept per user, so on a shared device
+  one account's events or resume point are never sent or shown for another.
 
 Server rules:
 
@@ -91,7 +100,8 @@ Server rules:
 - `POST events/batch/` takes `{"events": [ ...up to 100 events... ]}` and returns one
   result per event in the same order: `created`, `duplicate` (already stored — a retry)
   or `rejected` (with `errors`; drop it, it will never succeed). The whole request is
-  `400` only if the body itself is malformed. 60 batches/minute per user.
+  `400` only if the body itself is malformed. Each event counts against the shared
+  120 events/minute budget; on `429` the queue keeps the events and retries later.
 - `PUT playback-state/` with `{"song", "position_seconds", "room"?}` saves the user's
   single recovery entry (last write wins). `GET` returns it, or `204` when there is
   nothing to resume or the song is no longer playable. `DELETE` clears it.
