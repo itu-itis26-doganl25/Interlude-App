@@ -1,0 +1,12 @@
+body { font-family: system-ui, sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; color: #222; }
+h1 { font-size: 1.4rem; }
+h2 { font-size: 1.05rem; margin-top: 1.6rem; }
+button { font-size: 1rem; padding: 0.5rem 1rem; margin-right: 0.4rem; cursor: pointer; }
+button:disabled { opacity: 0.5; cursor: default; }
+input[type=range] { width: 100%; }
+table { border-collapse: collapse; width: 100%; }
+td, th { text-align: left; padding: 0.3rem 0.5rem; border-bottom: 1px solid #ddd; }
+.big { font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+.muted { color: #777; font-size: 0.9rem; }
+.ok { color: #16794a; }
+.bad { color: #b3261e; }
