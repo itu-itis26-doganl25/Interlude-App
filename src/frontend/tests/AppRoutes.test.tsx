@@ -1,9 +1,9 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
-import { AppRoutes } from '../../src/frontend/src/app/AppRoutes';
-import { SessionProvider } from '../../src/frontend/src/auth/SessionContext';
-import type { AccountRole, Session } from '../../src/frontend/src/auth/SessionContext';
+import { AppRoutes } from '../src/app/AppRoutes';
+import { SessionProvider } from '../src/auth/SessionContext';
+import type { AccountRole, Session } from '../src/auth/SessionContext';
 
 function openAt(path: string, role: AccountRole | null = 'listener') {
   const initialValue: Session = role

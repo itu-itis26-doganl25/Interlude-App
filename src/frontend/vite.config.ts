@@ -5,9 +5,14 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  const frontendTests = fileURLToPath(new URL('../../tests/frontend/', import.meta.url));
+  const frontendTests = fileURLToPath(new URL('./tests/', import.meta.url));
 
   return {
+    resolve: {
+      alias: {
+        '@vitest/coverage-v8': fileURLToPath(new URL('./node_modules/@vitest/coverage-v8/dist/index.js', import.meta.url)),
+      },
+    },
     plugins: [react()],
     server: {
       port: 5173,
@@ -21,7 +26,7 @@ export default defineConfig(({ mode }) => {
     test: {
       environment: 'jsdom',
       dir: frontendTests,
-      setupFiles: [fileURLToPath(new URL('../../tests/frontend/setup.ts', import.meta.url))],
+      setupFiles: [fileURLToPath(new URL('./tests/setup.ts', import.meta.url))],
       include: ['**/*.{test,spec}.{ts,tsx}'],
       css: true,
     },

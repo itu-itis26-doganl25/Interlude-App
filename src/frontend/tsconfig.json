@@ -17,5 +17,5 @@
     "skipLibCheck": true,
     "types": ["node", "vite/client", "vitest/globals"]
   },
-  "include": ["src", "vite.config.ts", "../../tests/frontend/**/*.ts", "../../tests/frontend/**/*.tsx"]
+  "include": ["src", "vite.config.ts", "../../tests/**/*.ts", "../../tests/**/*.tsx"]
 }
