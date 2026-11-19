@@ -16,6 +16,7 @@ urlpatterns = [
     path("api/auth/", include("apps.accounts.urls")),  # WBS-2.1
     # Each app adds its own routes here as it is built, e.g.
     path("api/catalogue/", include("apps.catalogue.urls")),   # WBS-5.1
+    path("api/rooms/", include("apps.rooms.urls")),   # WBS-9.1
     path("api-auth/", include("rest_framework.urls")),   # login/logout for the browsable API
     # to try 
 ]
