@@ -243,9 +243,9 @@ def test_server_keeps_its_own_receive_time(api_client, listener, musician, make_
 def test_plays_of_one_track_are_capped_per_hour(
     api_client, listener, musician, make_song, monkeypatch
 ):
-    from apps.analytics import serializers
+    from apps.analytics import recording
 
-    monkeypatch.setattr(serializers, "PLAYS_PER_TRACK_PER_HOUR", 2)
+    monkeypatch.setattr(recording, "PLAYS_PER_TRACK_PER_HOUR", 2)
     song, other = make_song(musician, "A"), make_song(musician, "B")
     api_client.force_authenticate(listener)
     accepted = [api_client.post(EVENTS, event(song), format="json") for _ in range(2)]
@@ -259,3 +259,89 @@ def test_plays_of_one_track_are_capped_per_hour(
     assert over.status_code == 400 and "event_type" in over.data
     assert retry.status_code == 200  # a retry of a stored play is not a new play
     assert (skip.status_code, other_track.status_code) == (201, 201)
+
+
+def test_back_dated_plays_cannot_bypass_the_cap(
+    api_client, listener, musician, make_song, monkeypatch
+):
+    """The cap counts plays the server received in the last hour, whatever time the
+    client claims, so spreading occurred_at over past hours does not help."""
+    from apps.analytics import recording
+
+    monkeypatch.setattr(recording, "PLAYS_PER_TRACK_PER_HOUR", 2)
+    song = make_song(musician)
+    api_client.force_authenticate(listener)
+    for _ in range(2):
+        assert api_client.post(EVENTS, event(song), format="json").status_code == 201
+
+    two_hours_ago = (timezone.now() - timedelta(hours=2)).isoformat()
+    response = api_client.post(EVENTS, event(song, occurred_at=two_hours_ago), format="json")
+
+    assert response.status_code == 400
+    batch = api_client.post(
+        BATCH, {"events": [event(song, occurred_at=two_hours_ago)]}, format="json"
+    )
+    assert batch.data["results"][0]["status"] == "rejected"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_concurrent_plays_cannot_exceed_the_cap(listener, musician, make_song, monkeypatch):
+    """Count-then-insert runs under a per-user row lock (needs a real concurrent DB)."""
+    import threading
+
+    from django.db import connection
+
+    from apps.analytics import recording
+
+    if connection.vendor != "postgresql":
+        pytest.skip("SQLite serializes writes; run against PostgreSQL to test locking")
+    monkeypatch.setattr(recording, "PLAYS_PER_TRACK_PER_HOUR", 3)
+    song = make_song(musician)
+    barrier = threading.Barrier(8)
+    outcomes: list[str] = []
+
+    def play():
+        barrier.wait()
+        try:
+            data = {"client_event_id": uuid.uuid4(), "song": song, "event_type": "play"}
+            recording.record_event(listener, data)
+            outcomes.append("stored")
+        except recording.PlayLimitReached:
+            outcomes.append("limited")
+        finally:
+            connection.close()
+
+    threads = [threading.Thread(target=play) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert outcomes.count("stored") == 3
+    assert ListeningEvent.objects.filter(event_type="play").count() == 3
+
+
+def test_event_endpoints_accept_json_only(api_client, listener, musician, make_song):
+    """Form/multipart bodies were charged as a single event by the throttle."""
+    song = make_song(musician)
+    api_client.force_authenticate(listener)
+
+    form = api_client.post(BATCH, {"events": str(song.id)})  # multipart by default
+    single = api_client.post(EVENTS, {"song": song.id, "event_type": "play"})
+
+    assert (form.status_code, single.status_code) == (415, 415)
+    assert not ListeningEvent.objects.exists()
+
+
+def test_malformed_batch_is_charged_the_maximum(
+    api_client, listener, musician, make_song, monkeypatch
+):
+    from apps.analytics.views import ListeningEventThrottle
+
+    monkeypatch.setattr(ListeningEventThrottle, "rate", "100/min")
+    api_client.force_authenticate(listener)
+
+    bad = api_client.post(BATCH, {"events": "not-a-list"}, format="json")
+    after = api_client.post(EVENTS, event(make_song(musician)), format="json")
+
+    assert (bad.status_code, after.status_code) == (400, 429)

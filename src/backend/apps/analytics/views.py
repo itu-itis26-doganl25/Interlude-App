@@ -3,6 +3,7 @@ from django.utils import timezone
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.parsers import JSONParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -14,7 +15,7 @@ from apps.catalogue.models import Song
 from . import services
 from .models import PlaybackState
 from .permissions import IsMusician
-from .recording import record_event
+from .recording import PlayLimitReached, record_event
 from .serializers import (
     MAX_BATCH_SIZE,
     DashboardSerializer,
@@ -26,13 +27,21 @@ from .serializers import (
     StatsQuerySerializer,
 )
 
+PLAY_LIMIT_ERROR = {"event_type": ["Play limit for this track reached; try again later."]}
 
-def _event_count(request: Request) -> int:
-    """Events carried by a request: 1 for a single event, the list size for a batch."""
+
+def _event_count(request: Request, view) -> int:
+    """
+    Events a request carries: 1 for a single event, the list size for a batch. The
+    event views accept JSON only, so this sees the same data their serializers do;
+    a batch without a usable `events` list is charged the maximum.
+    """
+    if not isinstance(view, ListeningEventBatchView):
+        return 1
     events = request.data.get("events") if isinstance(request.data, dict) else None
-    if isinstance(events, list):
-        return max(1, min(len(events), MAX_BATCH_SIZE))
-    return 1
+    if not isinstance(events, list):
+        return MAX_BATCH_SIZE
+    return max(1, min(len(events), MAX_BATCH_SIZE))
 
 
 class ListeningEventThrottle(UserRateThrottle):
@@ -55,7 +64,7 @@ class ListeningEventThrottle(UserRateThrottle):
         self.now = self.timer()
         while self.history and self.history[-1] <= self.now - self.duration:
             self.history.pop()
-        cost = _event_count(request)
+        cost = _event_count(request, view)
         if len(self.history) + cost > self.num_requests:
             return self.throttle_failure()
         self.history[:0] = [self.now] * cost
@@ -68,6 +77,7 @@ class ListeningEventCreateView(APIView):
 
     permission_classes = [IsAuthenticated]
     throttle_classes = [ListeningEventThrottle]
+    parser_classes = [JSONParser]
 
     @extend_schema(
         request=ListeningEventSerializer,
@@ -81,7 +91,10 @@ class ListeningEventCreateView(APIView):
     def post(self, request: Request) -> Response:
         serializer = ListeningEventSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        event, created = record_event(request.user, serializer.validated_data)
+        try:
+            event, created = record_event(request.user, serializer.validated_data)
+        except PlayLimitReached:
+            return Response(PLAY_LIMIT_ERROR, status=status.HTTP_400_BAD_REQUEST)
         code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
         return Response(ListeningEventSerializer(event).data, status=code)
 
@@ -95,6 +108,7 @@ class ListeningEventBatchView(APIView):
 
     permission_classes = [IsAuthenticated]
     throttle_classes = [ListeningEventThrottle]
+    parser_classes = [JSONParser]
 
     @extend_schema(request=EventBatchSerializer, responses=EventBatchResponseSerializer)
     def post(self, request: Request) -> Response:
@@ -109,7 +123,11 @@ class ListeningEventBatchView(APIView):
             if not serializer.is_valid():
                 results.append({**result, "status": "rejected", "errors": serializer.errors})
                 continue
-            _, created = record_event(request.user, serializer.validated_data)
+            try:
+                _, created = record_event(request.user, serializer.validated_data)
+            except PlayLimitReached:
+                results.append({**result, "status": "rejected", "errors": PLAY_LIMIT_ERROR})
+                continue
             results.append({**result, "status": "created" if created else "duplicate"})
         return Response(EventBatchResponseSerializer({"results": results}).data)
 

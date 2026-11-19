@@ -38,11 +38,15 @@ POST /api/analytics/events/
   because events can arrive late; it only sets the `context`.
 - `400` for unknown/unplayable songs, unknown rooms, unknown event types or a
   position beyond the track duration. `401` when not logged in.
+- Both event endpoints accept **JSON only** (`415` otherwise).
 - Abuse limits: **120 events/minute per user**, counted per event and shared by the
-  single and batch endpoints (`429` above it); at most **20 `play` events per user per
-  track per hour** (`400` on `event_type` above it — a retry of a stored play is still
-  a `duplicate`). Throttling uses Django's cache; production needs a shared cache
-  (Redis) so the limit holds across workers.
+  single and batch endpoints (`429` above it; a batch without a valid `events` list is
+  charged the maximum, 100). At most **20 `play` events per user per track received
+  in the last hour** — counted by server time, so a back-dated `occurred_at` does not
+  help — checked and stored under a per-user lock (`400` on `event_type` above it; in
+  a batch the item is `rejected`; a retry of a stored play is still a `duplicate`).
+  Throttling uses Django's cache; production needs a shared cache (Redis) so the
+  limit holds across workers.
 - `created_at` is when playback happened (statistics use it); the server also stores
   `received_at`, its own arrival time, which clients cannot set.
 - The response includes `context` (`"individual"` or `"room"`) and never the user.

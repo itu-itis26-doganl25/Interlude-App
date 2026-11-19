@@ -45,8 +45,8 @@ class ListeningEvent(models.Model):
         ordering = ["-created_at"]
         indexes = [
             models.Index(fields=["song", "event_type", "created_at"]),
-            # Per-user play cap lookup (plays of one song in the last hour).
-            models.Index(fields=["user", "song", "created_at"]),
+            # Per-user play cap lookup (plays of one song received in the last hour).
+            models.Index(fields=["user", "song", "received_at"]),
         ]
         constraints = [
             models.UniqueConstraint(
