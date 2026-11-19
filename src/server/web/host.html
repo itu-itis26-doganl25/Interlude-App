@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Interlude spike — host</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>Host</h1>
+  <p class="muted">Controls playback for everyone. Join to listen here too.</p>
+
+  <p class="big" id="position">–</p>
+  <p class="muted" id="track"></p>
+  <input type="range" id="seek" min="0" max="1" step="0.1" value="0">
+  <p>
+    <button id="play">▶ Play</button>
+    <button id="pause">⏸ Pause</button>
+    <button id="back">−10 s</button>
+    <button id="fwd">+10 s</button>
+    <button id="join">Join as listener</button>
+  </p>
+  <audio id="audio"></audio>
+
+  <h2>Listeners</h2>
+  <p>Max drift between listeners: <strong id="drift">needs 2+ listeners</strong>
+     <span class="muted">(target &lt; 500 ms)</span></p>
+  <p>Room delay everyone aligns to: <strong id="roomTarget">–</strong></p>
+  <table>
+    <thead><tr><th>#</th><th>Connection</th><th>Delay behind server</th><th>Would need alone</th></tr></thead>
+    <tbody id="listeners"></tbody>
+  </table>
+
+  <script type="module">
+    import { join, api, fmtTime, fmtMs } from './client.js';
+    const $ = (id) => document.getElementById(id);
+    let state = { position: 0, duration: 0 };
+    let dragging = false;
+
+    const send = async (action, position) => {
+      const res = await api('/control', { body: { action, position } });
+      render(await res.json());
+    };
+
+    function render(s) {
+      state = s;
+      $('position').textContent = `${s.playing ? '▶' : '⏸'} ${fmtTime(s.position)} / ${fmtTime(s.duration)}`;
+      $('track').textContent = s.track;
+      $('seek').max = s.duration;
+      if (!dragging) $('seek').value = s.position;
+
+      $('drift').textContent = s.maxDriftMs == null ? 'needs 2+ listeners' : fmtMs(s.maxDriftMs);
+      $('drift').className = s.maxDriftMs == null ? '' : s.maxDriftMs < 500 ? 'ok' : 'bad';
+      $('listeners').innerHTML = s.listeners
+        .sort((a, b) => a.id - b.id)
+        .map((l) => `<tr><td>${l.id} ${l.name}</td><td>${l.state}</td><td>${fmtMs(l.delayMs)}</td><td>${fmtMs(l.needMs)}</td></tr>`)
+        .join('') || '<tr><td colspan="4" class="muted">nobody yet</td></tr>';
+      $('roomTarget').textContent = s.targetMs ? fmtMs(s.targetMs) : '–';
+    }
+
+    $('play').onclick = () => send('play');
+    $('pause').onclick = () => send('pause');
+    $('back').onclick = () => send('seek', state.position - 10);
+    $('fwd').onclick = () => send('seek', state.position + 10);
+    $('seek').oninput = () => { dragging = true; };
+    $('seek').onchange = () => { dragging = false; send('seek', Number($('seek').value)); };
+
+    // The host page polls; listeners get the same state pushed over WebRTC.
+    setInterval(async () => render(await (await api('/state')).json()), 500);
+
+    $('join').onclick = async () => {
+      $('join').disabled = true;
+      await join({ audio: $('audio'), onState: () => {}, onStats: () => {} });
+      $('join').textContent = 'Listening';
+    };
+  </script>
+</body>
+</html>

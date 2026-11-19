@@ -1,5 +1,23 @@
+
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+coverage/
+
+# macOS
+.DS_Store
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+.venv/
 .pytest_cache/
 .ruff_cache/
 .coverage

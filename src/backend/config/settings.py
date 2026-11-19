@@ -5,6 +5,7 @@ All environment-specific values come from environment variables.
 Nothing secret is committed to the repository.
 """
 from pathlib import Path
+from datetime import timedelta
 
 import environ
 
@@ -20,6 +21,9 @@ env = environ.Env(
     MEDIA_URL_EXPIRY_SECONDS=(int, 3600),
     MAX_AUDIO_UPLOAD_MB=(int, 50),
     MAX_IMAGE_UPLOAD_MB=(int, 5),
+    MEDIA_SERVER_URL=(str, "http://localhost:8080"),
+    MEDIA_SERVER_SECRET=(str, ""),
+    MEDIA_TOKEN_TTL_SECONDS=(int, 120),
 )
 environ.Env.read_env(BASE_DIR / ".env")
 
@@ -111,7 +115,11 @@ AUTH_PASSWORD_VALIDATORS = [
 # --------------------------------------------------------------------------
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        # C replaces/extends this with token auth in WBS-2.1
+        # JWT first: the mobile app sends "Authorization: Bearer <token>".
+        # Being first also makes unauthenticated requests return 401 (FR-07)
+        # instead of 403.
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        # Web app: Django session cookie + CSRF protection.
         "rest_framework.authentication.SessionAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
@@ -128,6 +136,27 @@ SPECTACULAR_SETTINGS = {
     "VERSION": "0.1.0",
     "SERVE_INCLUDE_SCHEMA": False,
 }
+
+# --------------------------------------------------------------------------
+# JWT for the mobile app (WBS-2.1). Web uses sessions instead.
+# --------------------------------------------------------------------------
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+    "UPDATE_LAST_LOGIN": True,
+    "AUTH_HEADER_TYPES": ("Bearer",),
+}
+
+# --------------------------------------------------------------------------
+# Room audio media server (src/server, WBS-9.1 / 11.x)
+# Joining a room returns a short-lived token signed with this shared secret;
+# the Go media server checks it. Without a secret, rooms work without audio.
+# --------------------------------------------------------------------------
+MEDIA_SERVER_URL = env("MEDIA_SERVER_URL")
+MEDIA_SERVER_SECRET = env("MEDIA_SERVER_SECRET")
+MEDIA_TOKEN_TTL_SECONDS = env("MEDIA_TOKEN_TTL_SECONDS")
 
 # --------------------------------------------------------------------------
 # Static & media storage
