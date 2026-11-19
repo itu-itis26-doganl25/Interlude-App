@@ -1,13 +1,16 @@
 # Analytics
 
-Owner: E (Efe Arda Demir). Records listening events from the players (WBS-12.1).
-Requirements: FR-35, UC-15, NFR-18. Full schema: `/api/docs/` (tag `analytics`).
+Owner: E (Efe Arda Demir). Records listening events from the players (WBS-12.1)
+and serves aggregated statistics for the musician dashboard (WBS-12.2).
+Requirements: FR-35–FR-39, UC-15, UC-16, NFR-18. Full schema: `/api/docs/` (tag `analytics`).
 
 ## Endpoints
 
 | Method | Path | Who | Purpose |
 |---|---|---|---|
 | POST | `/api/analytics/events/` | any logged-in user | Record a play / skip / complete event |
+| GET | `/api/analytics/dashboard/` | musician | Statistics for the requester's own tracks |
+| GET | `/api/analytics/songs/<song_id>/` | musician (track owner) | Statistics for one own track |
 
 ### Recording an event (players: web, room, mobile)
 
@@ -34,6 +37,34 @@ POST /api/analytics/events/
   position beyond the track duration. `401` when not logged in. `429` above
   120 events/minute per user.
 - The response includes `context` (`"individual"` or `"room"`) and never the user.
+
+### Statistics (musician dashboard)
+
+Query params (all optional): `start`, `end` (inclusive `YYYY-MM-DD`, in
+`Europe/Istanbul`; default: last 30 days ending today), `interval`
+(`day` | `week` | `month`, default `day`). The range is limited to 366 days.
+
+```json
+GET /api/analytics/dashboard/?start=2026-11-01&end=2026-11-07
+{
+  "range": {"start": "2026-11-01", "end": "2026-11-07", "interval": "day"},
+  "total_plays": 4,
+  "tracks": [
+    {"song_id": 1, "title": "Alpha", "plays": 3, "skips": 1, "completions": 1},
+    {"song_id": 2, "title": "Beta",  "plays": 1, "skips": 1, "completions": 0}
+  ],
+  "top_tracks": [ /* top 5 of `tracks` with plays > 0 */ ],
+  "plays_over_time": [{"period": "2026-11-01", "plays": 0}, ...]
+}
+```
+
+- `plays` counts play-start events. `tracks` lists every own track (drafts and
+  zero-play tracks included), most played first. `plays_over_time` has one entry per
+  period with empty periods as `0`; `period` is the first day of the day / week
+  (Monday) / month, in local time.
+- `songs/<id>/` returns `range`, `track` (one `tracks` entry) and `plays_over_time`.
+- `401` when not logged in; listeners and other musicians' tracks get `403`; an
+  unknown track `404`. Responses contain only aggregates — no listener identifiers (NFR-18).
 
 ## Tests
 
