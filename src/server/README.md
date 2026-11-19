@@ -28,6 +28,17 @@ The server prints the URLs:
 The beep track beeps once a second, with a higher beep every 10th second, so you
 can hear whether listeners line up. It's generated into `testdata/` on first run.
 
+## Tests
+
+```bash
+go test -race -cover ./...
+```
+
+Needs ffmpeg; the player and streaming tests skip without it. They cover the
+drift-target logic, play / pause / seek / end of track, and an end-to-end test
+where Go WebRTC clients join over `/offer`, receive Opus audio (including a late
+joiner, FR-33) and stop receiving on pause.
+
 ## How it works
 
 | File | What it does |

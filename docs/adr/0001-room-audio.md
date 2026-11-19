@@ -27,6 +27,11 @@ room audio, with WebSocket-coordinated playback (R-10) as the contingency.
 
 ## Spike results
 
+These are development measurements on one home network. They show the
+approach works; they are **not** the official NFR-09 verification, which the
+requirements specify must be measured on the Azure staging or production
+environment (see Open items).
+
 Prototype in `src/server/`, tested on 2026-11-19 with a generated beep track
 (128 kbps stereo Opus, 20 ms frames). Delay = half the round trip + the
 browser's jitter buffer, from `getStats()`; sound-card latency is not included.
@@ -75,6 +80,9 @@ deployment.
 
 ## Open items
 
-- **Internet conditions not measured.** All tests ran on one home network.
-  Repeat once the server runs on Azure, with listeners on mobile data.
+- **NFR-09 must be verified on Azure.** The requirements specification states
+  that performance figures are measured against the staging or production
+  environment on Azure, not on developers' machines. Repeat the multi-client
+  drift test there once the media server is deployed (WBS-11.2, with B), with
+  listeners on different networks including mobile data.
 - Authentication and multiple rooms (WBS-9.1), TURN and deployment (WBS-11.2).

@@ -43,6 +43,12 @@ func main() {
 	}
 	go room.BroadcastState(500 * time.Millisecond)
 
+	printURLs(*addr)
+	log.Fatal(http.ListenAndServe(*addr, newMux(room)))
+}
+
+// newMux wires the HTTP routes: test pages, WebRTC handshake, host commands, state.
+func newMux(room *Room) *http.ServeMux {
 	static, _ := fs.Sub(webFiles, "web")
 	mux := http.NewServeMux()
 	mux.Handle("GET /", http.FileServerFS(static))
@@ -51,9 +57,7 @@ func main() {
 	mux.HandleFunc("GET /state", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, room.State())
 	})
-
-	printURLs(*addr)
-	log.Fatal(http.ListenAndServe(*addr, mux))
+	return mux
 }
 
 // ensureBeepTrack generates a 5-minute test track: a short beep every second,
