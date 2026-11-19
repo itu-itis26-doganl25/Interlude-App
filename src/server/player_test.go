@@ -8,9 +8,9 @@ import (
 	"time"
 )
 
-// newTestRoom creates a room streaming a generated tone of the given length.
+// testTrack generates a tone of the given length and returns its path.
 // Skips the test when ffmpeg isn't installed.
-func newTestRoom(t *testing.T, length time.Duration) *Room {
+func testTrack(t *testing.T, length time.Duration) string {
 	t.Helper()
 	if _, err := exec.LookPath("ffmpeg"); err != nil {
 		t.Skip("ffmpeg not installed")
@@ -21,7 +21,13 @@ func newTestRoom(t *testing.T, length time.Duration) *Room {
 		"-f", "lavfi", "-i", src, "-ac", "2", path).CombinedOutput(); err != nil {
 		t.Fatalf("generating tone: %v\n%s", err, out)
 	}
-	r, err := NewRoom(path)
+	return path
+}
+
+// newTestRoom creates a room streaming a generated tone of the given length.
+func newTestRoom(t *testing.T, length time.Duration) *Room {
+	t.Helper()
+	r, err := NewRoom(testTrack(t, length))
 	if err != nil {
 		t.Fatal(err)
 	}

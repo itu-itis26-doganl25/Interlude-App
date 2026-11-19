@@ -39,6 +39,12 @@
       try {
         await join({
           audio: $('audio'),
+          onBlocked: () => {
+            // Audio is arriving but the browser wants another tap to play it.
+            $('join').textContent = '🔊 Tap to hear';
+            $('join').disabled = false;
+            $('join').onclick = () => { $('audio').play(); $('join').textContent = 'Listening'; $('join').disabled = true; };
+          },
           onState: (s) => {
             // What this listener hears now = server position minus its own delay.
             const hearing = s.playing ? Math.max(0, s.position - delayMs / 1000) : s.position;
