@@ -53,6 +53,7 @@ LOCAL_APPS = [
     "apps.catalogue",  # owner: A — songs, albums, media, search, streaming
     "apps.rooms",      # owner: D — listening rooms, presence, chat
     "apps.analytics",  # owner: E/F — listening events, metrics
+    "apps.playlists",  # owner: E — playlists (WBS-8.3)
 ]
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 

@@ -14,6 +14,7 @@ urlpatterns = [
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
     path("api/auth/", include("apps.accounts.urls")),  # WBS-2.1
+    path("api/playlists/", include("apps.playlists.urls")),  # WBS-8.3
     # Each app adds its own routes here as it is built, e.g.
     path("api/catalogue/", include("apps.catalogue.urls")),   # WBS-5.1
     path("api/rooms/", include("apps.rooms.urls")),   # WBS-9.1
