@@ -1,8 +1,9 @@
 # Analytics
 
-Owner: E (Efe Arda Demir). Records listening events from the players (WBS-12.1)
-and serves aggregated statistics for the musician dashboard (WBS-12.2).
-Requirements: FR-35–FR-39, UC-15, UC-16, NFR-18. Full schema: `/api/docs/` (tag `analytics`).
+Owner: E (Efe Arda Demir). Records listening events from the players (WBS-12.1),
+serves aggregated statistics for the musician dashboard (WBS-12.2) and keeps the
+playback recovery log with offline event sync (WBS-12.3).
+Requirements: FR-35–FR-39, FR-53, UC-15, UC-16, NFR-18. Full schema: `/api/docs/` (tag `analytics`).
 
 ## Endpoints
 
@@ -11,6 +12,8 @@ Requirements: FR-35–FR-39, UC-15, UC-16, NFR-18. Full schema: `/api/docs/` (ta
 | POST | `/api/analytics/events/` | any logged-in user | Record a play / skip / complete event |
 | GET | `/api/analytics/dashboard/` | musician | Statistics for the requester's own tracks |
 | GET | `/api/analytics/songs/<song_id>/` | musician (track owner) | Statistics for one own track |
+| POST | `/api/analytics/events/batch/` | any logged-in user | Upload up to 100 buffered events |
+| GET / PUT / DELETE | `/api/analytics/playback-state/` | any logged-in user | Recovery log: read / save / clear |
 
 ### Recording an event (players: web, room, mobile)
 
@@ -65,6 +68,33 @@ GET /api/analytics/dashboard/?start=2026-11-01&end=2026-11-07
 - `songs/<id>/` returns `range`, `track` (one `tracks` entry) and `plays_over_time`.
 - `401` when not logged in; listeners and other musicians' tracks get `403`; an
   unknown track `404`. Responses contain only aggregates — no listener identifiers (NFR-18).
+
+### Offline events and playback recovery (FR-53)
+
+**Use the web helpers** in `src/frontend/src/lib/analytics/` instead of calling these
+endpoints directly — they implement the buffering and retry rules below.
+
+- `eventQueue.ts` — `createEventQueue()`; `queue.start()` once, then
+  `queue.track({ song, event_type, position_seconds?, room? })` on play / skip / complete.
+  Events are stored in `localStorage` first, sent in batches, and kept when offline;
+  they are flushed on the browser `online` event and on the next start.
+- `playbackRecovery.ts` — `createPlaybackRecorder()`; `recorder.update(...)` on
+  `timeupdate` (server copy at most every 10 s), `recorder.flush()` on pause / track
+  change / `pagehide`; `loadResumePoint()` on start and on `online` to offer
+  "Resume at mm:ss"; `clearResumePoint()` when there is nothing left to resume.
+
+Server rules:
+
+- Any event may include `occurred_at` (ISO time it happened). Offline plays are then
+  counted on the right day. Allowed: up to 7 days old, at most 5 minutes in the future;
+  otherwise `400`.
+- `POST events/batch/` takes `{"events": [ ...up to 100 events... ]}` and returns one
+  result per event in the same order: `created`, `duplicate` (already stored — a retry)
+  or `rejected` (with `errors`; drop it, it will never succeed). The whole request is
+  `400` only if the body itself is malformed. 60 batches/minute per user.
+- `PUT playback-state/` with `{"song", "position_seconds", "room"?}` saves the user's
+  single recovery entry (last write wins). `GET` returns it, or `204` when there is
+  nothing to resume or the song is no longer playable. `DELETE` clears it.
 
 ## Tests
 

@@ -1,4 +1,3 @@
-from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status
@@ -12,11 +11,15 @@ from rest_framework.views import APIView
 from apps.catalogue.models import Song
 
 from . import services
-from .models import ListeningEvent
+from .models import PlaybackState
 from .permissions import IsMusician
+from .recording import record_event
 from .serializers import (
     DashboardSerializer,
+    EventBatchResponseSerializer,
+    EventBatchSerializer,
     ListeningEventSerializer,
+    PlaybackStateSerializer,
     SongStatsSerializer,
     StatsQuerySerializer,
 )
@@ -47,22 +50,94 @@ class ListeningEventCreateView(APIView):
     def post(self, request: Request) -> Response:
         serializer = ListeningEventSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        client_event_id = serializer.validated_data["client_event_id"]
+        event, created = record_event(request.user, serializer.validated_data)
+        code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
+        return Response(ListeningEventSerializer(event).data, status=code)
 
-        existing = ListeningEvent.objects.filter(
-            user=request.user, client_event_id=client_event_id
-        ).first()
-        if existing:
-            return Response(ListeningEventSerializer(existing).data, status=status.HTTP_200_OK)
 
-        try:
-            with transaction.atomic():
-                event = serializer.save(user=request.user)
-        except IntegrityError:
-            # A concurrent retry stored the same event first.
-            event = ListeningEvent.objects.get(user=request.user, client_event_id=client_event_id)
-            return Response(ListeningEventSerializer(event).data, status=status.HTTP_200_OK)
-        return Response(ListeningEventSerializer(event).data, status=status.HTTP_201_CREATED)
+class ListeningEventBatchThrottle(UserRateThrottle):
+    # The web queue sends every event through this endpoint (one code path for
+    # online and offline), so it must allow fast skipping.
+    scope = "listening_event_batches"
+    rate = "60/min"
+
+
+class ListeningEventBatchView(APIView):
+    """
+    FR-53: events buffered while offline are uploaded together on reconnection.
+    Each item is validated and stored on its own, so one bad event cannot block the
+    queue; the per-item status tells the client what to drop from its buffer.
+    """
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ListeningEventBatchThrottle]
+
+    @extend_schema(request=EventBatchSerializer, responses=EventBatchResponseSerializer)
+    def post(self, request: Request) -> Response:
+        batch = EventBatchSerializer(data=request.data)
+        batch.is_valid(raise_exception=True)
+
+        results = []
+        for raw in batch.validated_data["events"]:
+            raw_id = raw.get("client_event_id")
+            result = {"client_event_id": None if raw_id is None else str(raw_id)}
+            serializer = ListeningEventSerializer(data=raw, context={"request": request})
+            if not serializer.is_valid():
+                results.append({**result, "status": "rejected", "errors": serializer.errors})
+                continue
+            _, created = record_event(request.user, serializer.validated_data)
+            results.append({**result, "status": "created" if created else "duplicate"})
+        return Response(EventBatchResponseSerializer({"results": results}).data)
+
+
+class PlaybackStateThrottle(UserRateThrottle):
+    scope = "playback_state"
+    rate = "60/min"
+
+
+class PlaybackStateView(APIView):
+    """
+    FR-53 recovery log. The player PUTs the current track and position during
+    playback (e.g. every 10 s and on pause) and GETs it after a reconnect or app
+    start to offer "Resume <track> at <position>".
+    """
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [PlaybackStateThrottle]
+
+    @extend_schema(
+        responses={
+            200: PlaybackStateSerializer,
+            204: OpenApiResponse(description="Nothing to resume."),
+        }
+    )
+    def get(self, request: Request) -> Response:
+        state = PlaybackState.objects.filter(user=request.user).first()
+        playable = Song.objects.visible_to(request.user)
+        if state is None or not playable.filter(pk=state.song_id).exists():
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        return Response(PlaybackStateSerializer(state).data)
+
+    @extend_schema(request=PlaybackStateSerializer, responses=PlaybackStateSerializer)
+    def put(self, request: Request) -> Response:
+        serializer = PlaybackStateSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        state, _ = PlaybackState.objects.update_or_create(
+            user=request.user,
+            defaults={
+                "song": data["song"],
+                "position_seconds": data.get("position_seconds", 0),
+                "room": data.get("room"),
+            },
+        )
+        return Response(PlaybackStateSerializer(state).data)
+
+    @extend_schema(responses={204: None})
+    def delete(self, request: Request) -> Response:
+        """Clear the log, e.g. when playback finished and there is nothing to resume."""
+        PlaybackState.objects.filter(user=request.user).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 def _range_payload(query: dict) -> dict:
