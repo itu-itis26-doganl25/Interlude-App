@@ -98,7 +98,7 @@ func TestHandleControlRejectsBadInput(t *testing.T) {
 func TestHandleOfferRejectsInvalidOffer(t *testing.T) {
 	r := &Room{peers: map[*Peer]struct{}{}}
 	rec := httptest.NewRecorder()
-	r.HandleOffer(rec, httptest.NewRequest(http.MethodPost, "/offer", strings.NewReader("{")))
+	r.HandleOffer(rec, httptest.NewRequest(http.MethodPost, "/offer", strings.NewReader("{")), &Claims{Name: "ayse"})
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("status %d, want 400", rec.Code)
 	}

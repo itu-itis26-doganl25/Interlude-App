@@ -21,6 +21,9 @@ env = environ.Env(
     MEDIA_URL_EXPIRY_SECONDS=(int, 3600),
     MAX_AUDIO_UPLOAD_MB=(int, 50),
     MAX_IMAGE_UPLOAD_MB=(int, 5),
+    MEDIA_SERVER_URL=(str, "http://localhost:8080"),
+    MEDIA_SERVER_SECRET=(str, ""),
+    MEDIA_TOKEN_TTL_SECONDS=(int, 120),
 )
 environ.Env.read_env(BASE_DIR / ".env")
 
@@ -145,6 +148,15 @@ SIMPLE_JWT = {
     "UPDATE_LAST_LOGIN": True,
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
+
+# --------------------------------------------------------------------------
+# Room audio media server (src/server, WBS-9.1 / 11.x)
+# Joining a room returns a short-lived token signed with this shared secret;
+# the Go media server checks it. Without a secret, rooms work without audio.
+# --------------------------------------------------------------------------
+MEDIA_SERVER_URL = env("MEDIA_SERVER_URL")
+MEDIA_SERVER_SECRET = env("MEDIA_SERVER_SECRET")
+MEDIA_TOKEN_TTL_SECONDS = env("MEDIA_TOKEN_TTL_SECONDS")
 
 # --------------------------------------------------------------------------
 # Static & media storage

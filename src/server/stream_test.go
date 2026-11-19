@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -19,7 +21,8 @@ type testListener struct {
 	state   chan State   // playback state pushed over the data channel
 }
 
-func joinRoom(t *testing.T, serverURL string) *testListener {
+// joinRoom joins room `room` on the server with a valid media token.
+func joinRoom(t *testing.T, serverURL string, room int) *testListener {
 	t.Helper()
 	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{})
 	if err != nil {
@@ -68,13 +71,15 @@ func joinRoom(t *testing.T, serverURL string) *testListener {
 	<-gathered
 
 	body, _ := json.Marshal(pc.LocalDescription())
-	res, err := http.Post(serverURL+"/offer", "application/json", bytes.NewReader(body))
+	req, _ := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/rooms/%d/offer", serverURL, room), bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+sign(t, testSecret, claimsFor(room)))
+	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		t.Fatalf("POST /offer: status %d", res.StatusCode)
+		t.Fatalf("POST offer: status %d", res.StatusCode)
 	}
 	var answer webrtc.SessionDescription
 	if err := json.NewDecoder(res.Body).Decode(&answer); err != nil {
@@ -101,16 +106,14 @@ func (l *testListener) waitForPackets(t *testing.T, n int64, timeout time.Durati
 // TestListenersReceiveRoomAudio covers FR-32 (audio over WebRTC, everyone
 // follows the host) and FR-33 (a late joiner gets the current audio).
 func TestListenersReceiveRoomAudio(t *testing.T) {
-	room := newTestRoom(t, 10*time.Second)
-	go room.BroadcastState(100 * time.Millisecond)
-	srv := httptest.NewServer(newMux(room))
-	defer srv.Close()
+	rooms, srv := newTestServer(t)
+	room, _ := rooms.Get(1)
 
-	first := joinRoom(t, srv.URL)
+	first := joinRoom(t, srv.URL, 1)
 	room.Play()
 	first.waitForPackets(t, 25, 5*time.Second) // 25 × 20 ms = half a second of audio
 
-	late := joinRoom(t, srv.URL) // joins mid-track
+	late := joinRoom(t, srv.URL, 1) // joins mid-track
 	late.waitForPackets(t, 25, 5*time.Second)
 
 	// The data channel tells listeners the room is playing.
@@ -133,4 +136,31 @@ func TestListenersReceiveRoomAudio(t *testing.T) {
 		t.Errorf("audio kept flowing after pause: %d -> %d and %d -> %d packets",
 			a, first.packets.Load(), b, late.packets.Load())
 	}
+}
+
+// TestRoomsStreamSeparately: playing one room sends nothing to another room's listeners.
+func TestRoomsStreamSeparately(t *testing.T) {
+	rooms, srv := newTestServer(t)
+	one, _ := rooms.Get(1)
+
+	inOne := joinRoom(t, srv.URL, 1)
+	inTwo := joinRoom(t, srv.URL, 2)
+	one.Play()
+	inOne.waitForPackets(t, 25, 5*time.Second)
+	if n := inTwo.packets.Load(); n != 0 {
+		t.Errorf("room 2 listener received %d packets from room 1", n)
+	}
+}
+
+func newTestServer(t *testing.T) (*Rooms, *httptest.Server) {
+	t.Helper()
+	rooms, err := NewRooms(testTrack(t, 10*time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	go rooms.Run(ctx, 100*time.Millisecond, time.Minute)
+	srv := httptest.NewServer(newMux(rooms, &Auth{secret: []byte(testSecret)}))
+	t.Cleanup(func() { srv.Close(); cancel(); rooms.CloseAll() })
+	return rooms, srv
 }
