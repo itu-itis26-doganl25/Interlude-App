@@ -1,11 +1,12 @@
 /**
- * Listening-event queue (WBS-12.1 / 12.3, FR-35, FR-53).
+ * Listening-event queue (WBS-12.1 / 12.3, FR-35, FR-53, UC-15 A1).
  *
- * Every event is written to a persistent buffer first and then uploaded in
- * batches. Online and offline use the same path: if the upload fails the events
- * stay buffered and are sent on the next flush (the `online` event, the next
- * track, or an app restart). Each event carries a client_event_id, so resending
- * after a lost response never creates duplicates on the server.
+ * Playback needs a connection (there is no offline playback), so events only
+ * pile up during short disconnects or server errors. Every event is written to a
+ * persistent buffer first and then sent, oldest first, to `POST analytics/events/`.
+ * If sending fails the events stay buffered and are retried on the next flush (the
+ * `online` event, the next tracked event, or an app restart). Each event carries a
+ * client_event_id, so resending after a lost response never creates duplicates.
  *
  * Usage in the player (WBS-8.2):
  *   const queue = createEventQueue({ userId: session.userId });
@@ -27,26 +28,18 @@ export interface ListeningEventInput {
 
 export interface QueuedEvent extends ListeningEventInput {
   client_event_id: string;
-  /** When the action happened; lets the server count offline plays on the right day. */
-  occurred_at: string;
 }
 
-export interface BatchResult {
-  client_event_id: string | null;
-  status: 'created' | 'duplicate' | 'rejected';
-  errors?: Record<string, unknown>;
-}
-
-export type SendBatch = (events: QueuedEvent[]) => Promise<BatchResult[]>;
+/** Sends one event; resolves once the server stored it (201) or already had it (200). */
+export type SendEvent = (event: QueuedEvent) => Promise<void>;
 
 export interface EventQueueOptions {
   /** The logged-in user. Buffers are per user so a shared device never sends
    * one account's events as another's. */
   userId: string | number;
   storage?: Storage;
-  send?: SendBatch;
+  send?: SendEvent;
   newId?: () => string;
-  now?: () => Date;
 }
 
 export interface EventQueue {
@@ -64,14 +57,8 @@ export const STORAGE_KEY = 'interlude.analytics.pendingEvents';
 export function pendingEventsKey(userId: string | number): string {
   return `${STORAGE_KEY}:${userId}`;
 }
-/** Same limit as the backend (MAX_BATCH_SIZE). */
-export const BATCH_SIZE = 100;
-/** Bounded so a long offline period cannot fill localStorage; oldest are dropped. */
-export const MAX_BUFFERED = 1000;
-
-export const sendBatch: SendBatch = async (events) => {
-  const response = await api.post<{ results: BatchResult[] }>('analytics/events/batch/', { events });
-  return response.results;
+export const sendEvent: SendEvent = async (event) => {
+  await api.post<unknown>('analytics/events/', event);
 };
 
 /** localStorage if it is really usable (it can be missing, blocked or a stub). */
@@ -89,9 +76,8 @@ export function usableLocalStorage(): Storage | undefined {
 export function createEventQueue(options: EventQueueOptions): EventQueue {
   const storage = options.storage ?? usableLocalStorage();
   const key = pendingEventsKey(options.userId);
-  const send = options.send ?? sendBatch;
+  const send = options.send ?? sendEvent;
   const newId = options.newId ?? (() => crypto.randomUUID());
-  const now = options.now ?? (() => new Date());
   let memory: QueuedEvent[] = [];
   let inFlight: Promise<void> | null = null;
 
@@ -115,37 +101,30 @@ export function createEventQueue(options: EventQueueOptions): EventQueue {
     }
   }
 
+  function remove(clientEventId: string): void {
+    write(read().filter((e) => e.client_event_id !== clientEventId));
+  }
+
   async function uploadAll(): Promise<void> {
     for (;;) {
-      const batch = read().slice(0, BATCH_SIZE);
-      if (batch.length === 0) return;
-      let results: BatchResult[];
+      const [next] = read();
+      if (!next) return;
       try {
-        results = await send(batch);
+        await send(next);
       } catch (error) {
-        // A malformed batch can never succeed; drop it instead of retrying forever.
-        if (error instanceof ApiError && error.status === 400) {
-          const sent = new Set(batch.map((e) => e.client_event_id));
-          write(read().filter((e) => !sent.has(e.client_event_id)));
-          continue;
-        }
-        return; // offline, server error, 401 or 429: keep the events for the next flush
+        // An invalid event (e.g. the song was unpublished) can never succeed: drop it
+        // instead of blocking the queue. Anything else (network failure, 401, 429,
+        // 5xx) keeps it for the next flush.
+        if (!(error instanceof ApiError && error.status === 400)) return;
       }
-      // Stored, already stored, or permanently invalid: all three leave the buffer.
-      const done = new Set(results.map((r) => r.client_event_id));
-      write(read().filter((e) => !done.has(e.client_event_id)));
-      if (done.size === 0) return; // defensive: avoid looping on an empty response
+      remove(next.client_event_id);
     }
   }
 
   const queue: EventQueue = {
     async track(input) {
-      const event: QueuedEvent = {
-        ...input,
-        client_event_id: newId(),
-        occurred_at: now().toISOString(),
-      };
-      write([...read(), event].slice(-MAX_BUFFERED));
+      const event: QueuedEvent = { ...input, client_event_id: newId() };
+      write([...read(), event]);
       await queue.flush();
     },
 

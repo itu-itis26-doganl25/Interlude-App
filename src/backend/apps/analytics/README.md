@@ -2,7 +2,7 @@
 
 Owner: E (Efe Arda Demir). Records listening events from the players (WBS-12.1),
 serves aggregated statistics for the musician dashboard (WBS-12.2) and keeps the
-playback recovery log with offline event sync (WBS-12.3).
+playback recovery log (WBS-12.3).
 Requirements: FR-35–FR-39, FR-53, UC-15, UC-16, NFR-18. Full schema: `/api/docs/` (tag `analytics`).
 
 ## Endpoints
@@ -12,7 +12,6 @@ Requirements: FR-35–FR-39, FR-53, UC-15, UC-16, NFR-18. Full schema: `/api/doc
 | POST | `/api/analytics/events/` | any logged-in user | Record a play / skip / complete event |
 | GET | `/api/analytics/dashboard/` | musician | Statistics for the requester's own tracks |
 | GET | `/api/analytics/songs/<song_id>/` | musician (track owner) | Statistics for one own track |
-| POST | `/api/analytics/events/batch/` | any logged-in user | Upload up to 100 buffered events |
 | GET / PUT / DELETE | `/api/analytics/playback-state/` | any logged-in user | Recovery log: read / save / clear |
 
 ### Recording an event (players: web, room, mobile)
@@ -37,18 +36,8 @@ POST /api/analytics/events/
   same rule as the catalogue). `room` may be any existing room, closed ones included,
   because events can arrive late; it only sets the `context`.
 - `400` for unknown/unplayable songs, unknown rooms, unknown event types or a
-  position beyond the track duration. `401` when not logged in.
-- Both event endpoints accept **JSON only** (`415` otherwise).
-- Abuse limits: **120 events/minute per user**, counted per event and shared by the
-  single and batch endpoints (`429` above it; a batch without a valid `events` list is
-  charged the maximum, 100). At most **20 `play` events per user per track received
-  in the last hour** — counted by server time, so a back-dated `occurred_at` does not
-  help — checked and stored under a per-user lock (`400` on `event_type` above it; in
-  a batch the item is `rejected`; a retry of a stored play is still a `duplicate`).
-  Throttling uses Django's cache; production needs a shared cache (Redis) so the
-  limit holds across workers.
-- `created_at` is when playback happened (statistics use it); the server also stores
-  `received_at`, its own arrival time, which clients cannot set.
+  position beyond the track duration. `401` when not logged in. `429` above
+  120 events/minute per user.
 - The response includes `context` (`"individual"` or `"room"`) and never the user.
 
 ### Statistics (musician dashboard)
@@ -79,15 +68,22 @@ GET /api/analytics/dashboard/?start=2026-11-01&end=2026-11-07
 - `401` when not logged in; listeners and other musicians' published tracks get
   `403`; unknown tracks and other musicians' drafts `404` (existence is not revealed). Responses contain only aggregates — no listener identifiers (NFR-18).
 
-### Offline events and playback recovery (FR-53)
+### Disconnects and playback recovery (FR-53)
+
+There is no offline playback: music needs a connection. Events can still fail to send
+during a short disconnect or a server error, and the player should offer to resume
+after a reconnect or app restart.
 
 **Use the web helpers** in `src/frontend/src/lib/analytics/` instead of calling these
-endpoints directly — they implement the buffering and retry rules below.
+endpoints directly:
 
 - `eventQueue.ts` — `createEventQueue({ userId })`; `queue.start()` once after login,
   then `queue.track({ song, event_type, position_seconds?, room? })` on play / skip /
-  complete. Events are stored in `localStorage` first, sent in batches, and kept when
-  offline; they are flushed on the browser `online` event and on the next start.
+  complete. Events are stored in `localStorage` first and sent one by one, oldest
+  first, to `POST events/`. On a network error, `401`, `429` or `5xx` they stay
+  buffered and are retried on the browser `online` event, the next event or the next
+  start; a `400` event is dropped (it can never succeed). The `client_event_id` makes
+  retries safe (`200` with the stored event).
 - `playbackRecovery.ts` — `createPlaybackRecorder({ userId })`; `recorder.update(...)`
   on `timeupdate` (server copy at most every 10 s), `recorder.flush()` on pause / track
   change / `pagehide`; `loadResumePoint(userId)` on start and on `online` to offer
@@ -98,17 +94,12 @@ endpoints directly — they implement the buffering and retry rules below.
 
 Server rules:
 
-- Any event may include `occurred_at` (ISO time it happened). Offline plays are then
-  counted on the right day. Allowed: up to 7 days old, at most 5 minutes in the future;
-  otherwise `400`.
-- `POST events/batch/` takes `{"events": [ ...up to 100 events... ]}` and returns one
-  result per event in the same order: `created`, `duplicate` (already stored — a retry)
-  or `rejected` (with `errors`; drop it, it will never succeed). The whole request is
-  `400` only if the body itself is malformed. Each event counts against the shared
-  120 events/minute budget; on `429` the queue keeps the events and retries later.
 - `PUT playback-state/` with `{"song", "position_seconds", "room"?}` saves the user's
   single recovery entry (last write wins). `GET` returns it, or `204` when there is
   nothing to resume or the song is no longer playable. `DELETE` clears it.
+- `400` for unknown/unplayable songs, unknown rooms or a position beyond the track
+  duration; `401` when not logged in; `429` above 60 requests/minute per user. The
+  response never includes the user.
 
 ## Tests
 

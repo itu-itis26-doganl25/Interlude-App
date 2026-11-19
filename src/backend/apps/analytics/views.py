@@ -1,9 +1,9 @@
+from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status
 from rest_framework.exceptions import PermissionDenied
-from rest_framework.parsers import JSONParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -13,63 +13,22 @@ from rest_framework.views import APIView
 from apps.catalogue.models import Song
 
 from . import services
-from .models import PlaybackState
+from .models import ListeningEvent, PlaybackState
 from .permissions import IsMusician
-from .recording import PlayLimitReached, record_event
 from .serializers import (
-    MAX_BATCH_SIZE,
     DashboardSerializer,
-    EventBatchResponseSerializer,
-    EventBatchSerializer,
     ListeningEventSerializer,
     PlaybackStateSerializer,
     SongStatsSerializer,
     StatsQuerySerializer,
 )
 
-PLAY_LIMIT_ERROR = {"event_type": ["Play limit for this track reached; try again later."]}
-
-
-def _event_count(request: Request, view) -> int:
-    """
-    Events a request carries: 1 for a single event, the list size for a batch. The
-    event views accept JSON only, so this sees the same data their serializers do;
-    a batch without a usable `events` list is charged the maximum.
-    """
-    if not isinstance(view, ListeningEventBatchView):
-        return 1
-    events = request.data.get("events") if isinstance(request.data, dict) else None
-    if not isinstance(events, list):
-        return MAX_BATCH_SIZE
-    return max(1, min(len(events), MAX_BATCH_SIZE))
-
 
 class ListeningEventThrottle(UserRateThrottle):
-    """
-    Per-user budget of *events* (not requests) shared by the single and batch
-    endpoints, so batching cannot be used to inflate play counts. 120 events/min is
-    generous for real playback and still lets a full offline batch (100) through.
-    """
+    """Caps event spam that would inflate play counts; generous for normal playback."""
 
     scope = "listening_events"
     rate = "120/min"
-
-    def allow_request(self, request, view) -> bool:
-        if self.rate is None:
-            return True
-        self.key = self.get_cache_key(request, view)
-        if self.key is None:
-            return True
-        self.history = self.cache.get(self.key, [])
-        self.now = self.timer()
-        while self.history and self.history[-1] <= self.now - self.duration:
-            self.history.pop()
-        cost = _event_count(request, view)
-        if len(self.history) + cost > self.num_requests:
-            return self.throttle_failure()
-        self.history[:0] = [self.now] * cost
-        self.cache.set(self.key, self.history, self.duration)
-        return True
 
 
 class ListeningEventCreateView(APIView):
@@ -77,7 +36,6 @@ class ListeningEventCreateView(APIView):
 
     permission_classes = [IsAuthenticated]
     throttle_classes = [ListeningEventThrottle]
-    parser_classes = [JSONParser]
 
     @extend_schema(
         request=ListeningEventSerializer,
@@ -91,45 +49,22 @@ class ListeningEventCreateView(APIView):
     def post(self, request: Request) -> Response:
         serializer = ListeningEventSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
+        client_event_id = serializer.validated_data["client_event_id"]
+
+        existing = ListeningEvent.objects.filter(
+            user=request.user, client_event_id=client_event_id
+        ).first()
+        if existing:
+            return Response(ListeningEventSerializer(existing).data, status=status.HTTP_200_OK)
+
         try:
-            event, created = record_event(request.user, serializer.validated_data)
-        except PlayLimitReached:
-            return Response(PLAY_LIMIT_ERROR, status=status.HTTP_400_BAD_REQUEST)
-        code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
-        return Response(ListeningEventSerializer(event).data, status=code)
-
-
-class ListeningEventBatchView(APIView):
-    """
-    FR-53: events buffered while offline are uploaded together on reconnection.
-    Each item is validated and stored on its own, so one bad event cannot block the
-    queue; the per-item status tells the client what to drop from its buffer.
-    """
-
-    permission_classes = [IsAuthenticated]
-    throttle_classes = [ListeningEventThrottle]
-    parser_classes = [JSONParser]
-
-    @extend_schema(request=EventBatchSerializer, responses=EventBatchResponseSerializer)
-    def post(self, request: Request) -> Response:
-        batch = EventBatchSerializer(data=request.data)
-        batch.is_valid(raise_exception=True)
-
-        results = []
-        for raw in batch.validated_data["events"]:
-            raw_id = raw.get("client_event_id")
-            result = {"client_event_id": None if raw_id is None else str(raw_id)}
-            serializer = ListeningEventSerializer(data=raw, context={"request": request})
-            if not serializer.is_valid():
-                results.append({**result, "status": "rejected", "errors": serializer.errors})
-                continue
-            try:
-                _, created = record_event(request.user, serializer.validated_data)
-            except PlayLimitReached:
-                results.append({**result, "status": "rejected", "errors": PLAY_LIMIT_ERROR})
-                continue
-            results.append({**result, "status": "created" if created else "duplicate"})
-        return Response(EventBatchResponseSerializer({"results": results}).data)
+            with transaction.atomic():
+                event = serializer.save(user=request.user)
+        except IntegrityError:
+            # A concurrent retry stored the same event first.
+            event = ListeningEvent.objects.get(user=request.user, client_event_id=client_event_id)
+            return Response(ListeningEventSerializer(event).data, status=status.HTTP_200_OK)
+        return Response(ListeningEventSerializer(event).data, status=status.HTTP_201_CREATED)
 
 
 class PlaybackStateThrottle(UserRateThrottle):

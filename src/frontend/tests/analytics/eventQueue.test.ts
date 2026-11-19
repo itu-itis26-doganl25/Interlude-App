@@ -1,13 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../src/lib/api/client';
 import {
-  BATCH_SIZE,
-  MAX_BUFFERED,
   pendingEventsKey,
   createEventQueue,
-  type BatchResult,
   type QueuedEvent,
-  type SendBatch,
+  type SendEvent,
 } from '../../src/lib/analytics/eventQueue';
 import { memoryStorage } from './memoryStorage';
 
@@ -19,9 +16,10 @@ function ids() {
   return () => `id-${++n}`;
 }
 
-function accepted(events: QueuedEvent[]): BatchResult[] {
-  return events.map((e) => ({ client_event_id: e.client_event_id, status: 'created' }));
-}
+const offline = () => vi.fn<SendEvent>(async () => { throw new TypeError('Failed to fetch'); });
+const accepting = () => vi.fn<SendEvent>(async () => {});
+const sentIds = (send: ReturnType<typeof vi.fn<SendEvent>>) =>
+  send.mock.calls.map(([event]: [QueuedEvent]) => event.client_event_id);
 
 beforeEach(() => {
   vi.stubGlobal('localStorage', memoryStorage());
@@ -31,61 +29,52 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('listening-event queue (FR-53)', () => {
+describe('listening-event queue (FR-53, UC-15 A1)', () => {
   it('keeps events in memory when localStorage is unusable', async () => {
     vi.stubGlobal('localStorage', {}); // present but without methods (blocked or a stub)
-    const queue = createEventQueue({ userId: USER, 
-      send: vi.fn<SendBatch>(async () => { throw new TypeError('Failed to fetch'); }),
-    });
+    const queue = createEventQueue({ userId: USER, send: offline() });
 
     await queue.track(PLAY);
 
     expect(queue.pending()).toHaveLength(1);
   });
 
-  it('sends an event with an id and the time it happened', async () => {
-    const send = vi.fn<SendBatch>(async (events) => accepted(events));
-    const queue = createEventQueue({ userId: USER,  send, newId: ids(), now: () => new Date('2026-11-19T10:00:00Z') });
+  it('sends an event with a client_event_id', async () => {
+    const send = accepting();
+    const queue = createEventQueue({ userId: USER, send, newId: ids() });
 
     await queue.track({ ...PLAY, position_seconds: 3 });
 
-    expect(send).toHaveBeenCalledWith([
-      { ...PLAY, position_seconds: 3, client_event_id: 'id-1', occurred_at: '2026-11-19T10:00:00.000Z' },
-    ]);
+    expect(send).toHaveBeenCalledWith({ ...PLAY, position_seconds: 3, client_event_id: 'id-1' });
     expect(queue.pending()).toEqual([]);
   });
 
-  it('keeps events while offline and sends them once on reconnection', async () => {
-    let online = false;
-    const send = vi.fn<SendBatch>(async (events) => {
-      if (!online) throw new TypeError('Failed to fetch');
-      return accepted(events);
+  it('keeps events during a disconnect and sends each once, in order, afterwards', async () => {
+    let connected = false;
+    const send = vi.fn<SendEvent>(async () => {
+      if (!connected) throw new TypeError('Failed to fetch');
     });
-    const queue = createEventQueue({ userId: USER,  send, newId: ids() });
+    const queue = createEventQueue({ userId: USER, send, newId: ids() });
 
     await queue.track(PLAY);
     await queue.track({ ...PLAY, event_type: 'complete' });
     expect(queue.pending().map((e) => e.client_event_id)).toEqual(['id-1', 'id-2']);
 
-    online = true;
+    connected = true;
     await queue.flush();
     await queue.flush();
 
-    const sentIds = send.mock.calls.slice(-1)[0][0].map((e) => e.client_event_id);
-    expect(sentIds).toEqual(['id-1', 'id-2']);
-    expect(send).toHaveBeenCalledTimes(3); // 2 failed attempts + 1 upload; second flush had nothing
+    // Two failed attempts (one per track), then id-1 and id-2; the second flush had nothing.
+    expect(sentIds(send)).toEqual(['id-1', 'id-1', 'id-1', 'id-2']);
     expect(queue.pending()).toEqual([]);
   });
 
   it('survives an app restart through localStorage', async () => {
-    const offline = vi.fn<SendBatch>(async () => {
-      throw new TypeError('Failed to fetch');
-    });
-    await createEventQueue({ userId: USER,  send: offline, newId: ids() }).track(PLAY);
+    await createEventQueue({ userId: USER, send: offline(), newId: ids() }).track(PLAY);
     expect(JSON.parse(localStorage.getItem(pendingEventsKey(USER)) ?? '[]')).toHaveLength(1);
 
-    const send = vi.fn<SendBatch>(async (events) => accepted(events));
-    const restarted = createEventQueue({ userId: USER,  send });
+    const send = accepting();
+    const restarted = createEventQueue({ userId: USER, send });
     const stop = restarted.start();
     await restarted.flush();
     stop();
@@ -95,86 +84,54 @@ describe('listening-event queue (FR-53)', () => {
   });
 
   it('flushes when the browser comes back online', async () => {
-    let online = false;
-    const send = vi.fn<SendBatch>(async (events) => {
-      if (!online) throw new TypeError('Failed to fetch');
-      return accepted(events);
+    let connected = false;
+    const send = vi.fn<SendEvent>(async () => {
+      if (!connected) throw new TypeError('Failed to fetch');
     });
-    const queue = createEventQueue({ userId: USER,  send });
+    const queue = createEventQueue({ userId: USER, send });
     const stop = queue.start();
     await queue.track(PLAY);
     expect(queue.pending()).toHaveLength(1);
 
-    online = true;
+    connected = true;
     window.dispatchEvent(new Event('online'));
 
     await vi.waitFor(() => expect(queue.pending()).toEqual([]));
     stop();
   });
 
-  it('drops duplicates and rejected events but keeps unreported ones', async () => {
-    const send = vi.fn<SendBatch>(async (events) => [
-      { client_event_id: events[0].client_event_id, status: 'duplicate' },
-      { client_event_id: events[1].client_event_id, status: 'rejected', errors: { song: ['x'] } },
-    ]);
-    const queue = createEventQueue({ userId: USER,  send: vi.fn<SendBatch>(async () => { throw new TypeError(); }), newId: ids() });
-    for (let i = 0; i < 3; i += 1) await queue.track(PLAY);
-
-    await createEventQueue({ userId: USER,  send }).flush();
-
-    expect(queue.pending().map((e) => e.client_event_id)).toEqual(['id-3']);
-  });
-
   it('keeps events on server errors and rate limits', async () => {
     for (const status of [401, 429, 500]) {
       localStorage.clear();
-      const queue = createEventQueue({ userId: USER, 
-        send: vi.fn<SendBatch>(async () => { throw new ApiError(status, 'nope'); }),
+      const queue = createEventQueue({
+        userId: USER,
+        send: vi.fn<SendEvent>(async () => { throw new ApiError(status, 'nope'); }),
       });
       await queue.track(PLAY);
       expect(queue.pending()).toHaveLength(1);
     }
   });
 
-  it('drops a batch the server says is malformed instead of retrying forever', async () => {
-    const send = vi.fn<SendBatch>(async () => { throw new ApiError(400, 'bad'); });
-    const queue = createEventQueue({ userId: USER,  send });
+  it('drops an event the server rejects as invalid and sends the rest', async () => {
+    await createEventQueue({ userId: USER, send: offline(), newId: ids() }).track(PLAY);
+    await createEventQueue({ userId: USER, send: offline(), newId: () => 'id-2' }).track(PLAY);
+    const send = vi.fn<SendEvent>(async (event) => {
+      if (event.client_event_id === 'id-1') throw new ApiError(400, 'bad');
+    });
 
-    await queue.track(PLAY);
+    const queue = createEventQueue({ userId: USER, send });
+    await queue.flush();
 
+    expect(sentIds(send)).toEqual(['id-1', 'id-2']);
     expect(queue.pending()).toEqual([]);
-  });
-
-  it('uploads in batches of the server limit', async () => {
-    const sizes: number[] = [];
-    const offline = createEventQueue({ userId: USER,  send: vi.fn<SendBatch>(async () => { throw new TypeError(); }), newId: ids() });
-    for (let i = 0; i < BATCH_SIZE + 5; i += 1) await offline.track(PLAY);
-
-    await createEventQueue({ userId: USER, 
-      send: async (events) => {
-        sizes.push(events.length);
-        return accepted(events);
-      },
-    }).flush();
-
-    expect(sizes).toEqual([BATCH_SIZE, 5]);
-  });
-
-  it('bounds the buffer by dropping the oldest events', async () => {
-    const queue = createEventQueue({ userId: USER,  send: vi.fn<SendBatch>(async () => { throw new TypeError(); }), newId: ids() });
-    for (let i = 0; i < MAX_BUFFERED + 2; i += 1) await queue.track(PLAY);
-
-    const pending = queue.pending();
-    expect(pending).toHaveLength(MAX_BUFFERED);
-    expect(pending[0].client_event_id).toBe('id-3');
   });
 
   it('shares one upload between concurrent flushes', async () => {
     let release: () => void = () => {};
-    const send = vi.fn<SendBatch>(
-      (events) => new Promise((resolve) => { release = () => resolve(accepted(events)); }),
+    const send = vi.fn<SendEvent>(
+      () => new Promise<void>((resolve) => { release = resolve; }),
     );
-    const queue = createEventQueue({ userId: USER,  send, newId: ids() });
+    const queue = createEventQueue({ userId: USER, send, newId: ids() });
     const first = queue.track(PLAY);
     const second = queue.flush();
 
@@ -185,13 +142,12 @@ describe('listening-event queue (FR-53)', () => {
   });
 
   it("never sends another user's buffered events", async () => {
-    const offline = vi.fn<SendBatch>(async () => { throw new TypeError('Failed to fetch'); });
-    await createEventQueue({ userId: 'alice', send: offline }).track(PLAY);
+    await createEventQueue({ userId: 'alice', send: offline() }).track(PLAY);
 
-    const send = vi.fn<SendBatch>(async (events) => accepted(events));
+    const send = accepting();
     await createEventQueue({ userId: 'bob', send }).flush();
 
     expect(send).not.toHaveBeenCalled();
-    expect(createEventQueue({ userId: 'alice', send: offline }).pending()).toHaveLength(1);
+    expect(createEventQueue({ userId: 'alice', send: offline() }).pending()).toHaveLength(1);
   });
 });
