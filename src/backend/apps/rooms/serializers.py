@@ -56,3 +56,20 @@ class RoomDetailSerializer(RoomSerializer):
 
     class Meta(RoomSerializer.Meta):
         fields = RoomSerializer.Meta.fields + ["participants"]
+
+
+class MediaAccessSerializer(serializers.Serializer):
+    """Where and how to connect to the room's audio (the Go media server)."""
+
+    url = serializers.URLField()
+    token = serializers.CharField()
+    expires_at = serializers.DateTimeField()
+
+
+class RoomWithMediaSerializer(RoomDetailSerializer):
+    """Room page after creating or joining: also how to connect to its audio."""
+
+    media = MediaAccessSerializer(allow_null=True, read_only=True)
+
+    class Meta(RoomDetailSerializer.Meta):
+        fields = RoomDetailSerializer.Meta.fields + ["media"]
