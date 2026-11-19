@@ -6,10 +6,35 @@ const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
 // needs 200 ms more buffer, like a slow Wi-Fi device would.
 const SIMULATED_NEED_MS = Number(new URLSearchParams(location.search).get('simulateMs') || 0);
 
+// Which room, and the media token Django gave us for it: page.html?room=3#token=...
+// (the token sits after # so it never reaches server logs). No token = dev mode.
+export const room = new URLSearchParams(location.search).get('room') || '1';
+const token = new URLSearchParams(location.hash.slice(1)).get('token');
+
+// api calls a room route on the media server with our token.
+export function api(path, { body, ...init } = {}) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return fetch(`/rooms/${encodeURIComponent(room)}${path}`, {
+    method: body === undefined ? 'GET' : 'POST',
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body),
+    ...init,
+  });
+}
+
 // join connects to the media server and starts playing the room audio.
 //   onState(state) — playback state pushed by the server every 500 ms
 //   onStats(stats) — this listener's connection stats, once a second
-export async function join({ audio, onState, onStats }) {
+//   onBlocked()    — the browser refused to start audio; call audio.play() from a tap
+export async function join({ audio, onState, onStats, onBlocked = () => {} }) {
+  // Phones (iOS Safari especially) only let a page start audio during the tap
+  // itself, and the stream arrives seconds later. So start the element now,
+  // while we're still inside the tap, and add the track to it when it comes.
+  const stream = new MediaStream();
+  audio.srcObject = stream;
+  audio.play().catch(() => {});
+
   const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
   pc.addTransceiver('audio', { direction: 'recvonly' }); // we only receive
   const channel = pc.createDataChannel('state');
@@ -17,8 +42,8 @@ export async function join({ audio, onState, onStats }) {
 
   pc.ontrack = (event) => {
     link.receiver = event.receiver;
-    audio.srcObject = event.streams[0];
-    audio.play();
+    stream.addTrack(event.track);
+    audio.play().catch(onBlocked);
   };
   channel.onmessage = (event) => {
     const state = JSON.parse(event.data);
@@ -32,11 +57,7 @@ export async function join({ audio, onState, onStats }) {
   await pc.setLocalDescription(offer);
   await iceGatheringComplete(pc);
 
-  const res = await fetch('/offer', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(pc.localDescription),
-  });
+  const res = await api('/offer', { body: pc.localDescription });
   if (!res.ok) throw new Error(await res.text());
   await pc.setRemoteDescription(await res.json());
 

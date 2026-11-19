@@ -3,6 +3,7 @@ module github.com/itu-itis26-doganl25/Interlude-App/src/server
 go 1.27.1
 
 require (
+	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/pion/interceptor v0.1.51
 	github.com/pion/webrtc/v4 v4.2.27
 )

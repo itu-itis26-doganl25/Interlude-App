@@ -32,17 +32,13 @@
   </table>
 
   <script type="module">
-    import { join, fmtTime, fmtMs } from './client.js';
+    import { join, api, fmtTime, fmtMs } from './client.js';
     const $ = (id) => document.getElementById(id);
     let state = { position: 0, duration: 0 };
     let dragging = false;
 
     const send = async (action, position) => {
-      const res = await fetch('/control', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, position }),
-      });
+      const res = await api('/control', { body: { action, position } });
       render(await res.json());
     };
 
@@ -57,7 +53,7 @@
       $('drift').className = s.maxDriftMs == null ? '' : s.maxDriftMs < 500 ? 'ok' : 'bad';
       $('listeners').innerHTML = s.listeners
         .sort((a, b) => a.id - b.id)
-        .map((l) => `<tr><td>${l.id}</td><td>${l.state}</td><td>${fmtMs(l.delayMs)}</td><td>${fmtMs(l.needMs)}</td></tr>`)
+        .map((l) => `<tr><td>${l.id} ${l.name}</td><td>${l.state}</td><td>${fmtMs(l.delayMs)}</td><td>${fmtMs(l.needMs)}</td></tr>`)
         .join('') || '<tr><td colspan="4" class="muted">nobody yet</td></tr>';
       $('roomTarget').textContent = s.targetMs ? fmtMs(s.targetMs) : '–';
     }
@@ -70,7 +66,7 @@
     $('seek').onchange = () => { dragging = false; send('seek', Number($('seek').value)); };
 
     // The host page polls; listeners get the same state pushed over WebRTC.
-    setInterval(async () => render(await (await fetch('/state')).json()), 500);
+    setInterval(async () => render(await (await api('/state')).json()), 500);
 
     $('join').onclick = async () => {
       $('join').disabled = true;

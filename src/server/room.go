@@ -38,7 +38,7 @@ const (
 )
 
 // Room is one listening room: a single audio track shared by every listener,
-// plus the playback state the host controls.
+// plus the playback state the host controls. Rooms (rooms.go) keeps one per room id.
 type Room struct {
 	api       *webrtc.API
 	track     *webrtc.TrackLocalStaticSample // encoded once, sent to every listener
@@ -60,6 +60,7 @@ type Room struct {
 // Peer is one connected listener.
 type Peer struct {
 	id      int
+	name    string // username from the media token
 	pc      *webrtc.PeerConnection
 	dc      *webrtc.DataChannel // set once the listener's data channel opens
 	delayMs *float64            // how far behind the server this listener hears now
@@ -71,7 +72,10 @@ func NewRoom(trackPath string) (*Room, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", trackPath, err)
 	}
+	return newRoom(trackPath, duration)
+}
 
+func newRoom(trackPath string, duration time.Duration) (*Room, error) {
 	// Register only our stereo Opus codec, plus Pion's default interceptors
 	// (RTCP reports, NACK) so the browser gets the usual feedback.
 	media := &webrtc.MediaEngine{}
@@ -91,7 +95,6 @@ func NewRoom(trackPath string) (*Room, error) {
 		return nil, err
 	}
 
-	log.Printf("track: %s (%s)", filepath.Base(trackPath), duration.Round(time.Second))
 	return &Room{
 		api:       webrtc.NewAPI(webrtc.WithMediaEngine(media), webrtc.WithInterceptorRegistry(registry)),
 		track:     track,
@@ -103,13 +106,14 @@ func NewRoom(trackPath string) (*Room, error) {
 
 // HandleOffer is the WebRTC handshake: the browser POSTs its offer, we attach
 // the shared room track to a new peer connection and reply with our answer.
-func (r *Room) HandleOffer(w http.ResponseWriter, req *http.Request) {
+// `who` is the listener, from their media token.
+func (r *Room) HandleOffer(w http.ResponseWriter, req *http.Request, who *Claims) {
 	var offer webrtc.SessionDescription
 	if err := json.NewDecoder(req.Body).Decode(&offer); err != nil {
 		http.Error(w, "invalid offer", http.StatusBadRequest)
 		return
 	}
-	answer, err := r.addPeer(offer)
+	answer, err := r.addPeer(offer, who.Name)
 	if err != nil {
 		log.Printf("offer failed: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -118,7 +122,7 @@ func (r *Room) HandleOffer(w http.ResponseWriter, req *http.Request) {
 	writeJSON(w, answer)
 }
 
-func (r *Room) addPeer(offer webrtc.SessionDescription) (*webrtc.SessionDescription, error) {
+func (r *Room) addPeer(offer webrtc.SessionDescription, name string) (*webrtc.SessionDescription, error) {
 	pc, err := r.api.NewPeerConnection(webrtc.Configuration{ICEServers: iceServers})
 	if err != nil {
 		return nil, err
@@ -141,7 +145,7 @@ func (r *Room) addPeer(offer webrtc.SessionDescription) (*webrtc.SessionDescript
 
 	r.mu.Lock()
 	r.nextID++
-	p := &Peer{id: r.nextID, pc: pc}
+	p := &Peer{id: r.nextID, name: name, pc: pc}
 	r.peers[p] = struct{}{}
 	r.mu.Unlock()
 
@@ -167,7 +171,7 @@ func (r *Room) addPeer(offer webrtc.SessionDescription) (*webrtc.SessionDescript
 	})
 
 	pc.OnConnectionStateChange(func(s webrtc.PeerConnectionState) {
-		log.Printf("listener %d: %s", p.id, s)
+		log.Printf("listener %d (%s): %s", p.id, p.name, s)
 		if s == webrtc.PeerConnectionStateFailed || s == webrtc.PeerConnectionStateClosed {
 			r.removePeer(p)
 		}
@@ -230,6 +234,7 @@ func (r *Room) HandleControl(w http.ResponseWriter, req *http.Request) {
 
 type ListenerInfo struct {
 	ID      int      `json:"id"`
+	Name    string   `json:"name"`
 	State   string   `json:"state"`
 	DelayMs *float64 `json:"delayMs"`
 	NeedMs  *float64 `json:"needMs"`
@@ -260,7 +265,7 @@ func (r *Room) State() State {
 	measured := 0
 	for p := range r.peers {
 		s.Listeners = append(s.Listeners, ListenerInfo{
-			ID: p.id, State: p.pc.ConnectionState().String(), DelayMs: p.delayMs, NeedMs: p.needMs,
+			ID: p.id, Name: p.name, State: p.pc.ConnectionState().String(), DelayMs: p.delayMs, NeedMs: p.needMs,
 		})
 		if p.delayMs != nil {
 			if measured == 0 || *p.delayMs < lo {
@@ -279,23 +284,42 @@ func (r *Room) State() State {
 	return s
 }
 
-// BroadcastState pushes the room state to every listener's data channel.
-func (r *Room) BroadcastState(every time.Duration) {
-	for range time.Tick(every) {
-		r.updateTarget()
-		msg, _ := json.Marshal(r.State())
-		r.mu.Lock()
-		var channels []*webrtc.DataChannel
-		for p := range r.peers {
-			if p.dc != nil {
-				channels = append(channels, p.dc)
-			}
-		}
-		r.mu.Unlock()
-		for _, dc := range channels {
-			_ = dc.SendText(string(msg)) // a closed channel just fails; the peer is removed separately
+// Broadcast retunes the shared delay and pushes the room state to every
+// listener's data channel. Rooms.Run calls it twice a second.
+func (r *Room) Broadcast() {
+	r.updateTarget()
+	msg, _ := json.Marshal(r.State())
+	r.mu.Lock()
+	var channels []*webrtc.DataChannel
+	for p := range r.peers {
+		if p.dc != nil {
+			channels = append(channels, p.dc)
 		}
 	}
+	r.mu.Unlock()
+	for _, dc := range channels {
+		_ = dc.SendText(string(msg)) // a closed channel just fails; the peer is removed separately
+	}
+}
+
+// Close stops the stream and disconnects everyone.
+func (r *Room) Close() {
+	r.Pause()
+	r.mu.Lock()
+	peers := r.peers
+	r.peers = map[*Peer]struct{}{}
+	r.mu.Unlock()
+	for p := range peers {
+		if p.pc != nil {
+			go p.pc.Close()
+		}
+	}
+}
+
+func (r *Room) listenerCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.peers)
 }
 
 // updateTarget sets the room's shared delay from the slowest listener's need.

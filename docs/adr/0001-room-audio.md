@@ -85,4 +85,8 @@ deployment.
   environment on Azure, not on developers' machines. Repeat the multi-client
   drift test there once the media server is deployed (WBS-11.2, with B), with
   listeners on different networks including mobile data.
-- Authentication and multiple rooms (WBS-9.1), TURN and deployment (WBS-11.2).
+- TURN and deployment (WBS-11.2), host-only playback control (FR-34, WBS-11.2).
+  Authentication and multiple rooms are done (WBS-9.1): joining a room returns
+  a 2-minute HS256 token (audience `interlude-media`) signed with a secret only
+  Django and the media server share, and the media server keeps one stream per
+  Django room id.
