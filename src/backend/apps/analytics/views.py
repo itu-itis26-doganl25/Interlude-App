@@ -13,11 +13,12 @@ from rest_framework.views import APIView
 from apps.catalogue.models import Song
 
 from . import services
-from .models import ListeningEvent
+from .models import ListeningEvent, PlaybackState
 from .permissions import IsMusician
 from .serializers import (
     DashboardSerializer,
     ListeningEventSerializer,
+    PlaybackStateSerializer,
     SongStatsSerializer,
     StatsQuerySerializer,
 )
@@ -64,6 +65,56 @@ class ListeningEventCreateView(APIView):
             event = ListeningEvent.objects.get(user=request.user, client_event_id=client_event_id)
             return Response(ListeningEventSerializer(event).data, status=status.HTTP_200_OK)
         return Response(ListeningEventSerializer(event).data, status=status.HTTP_201_CREATED)
+
+
+class PlaybackStateThrottle(UserRateThrottle):
+    scope = "playback_state"
+    rate = "60/min"
+
+
+class PlaybackStateView(APIView):
+    """
+    FR-53 recovery log. The player PUTs the current track and position during
+    playback (e.g. every 10 s and on pause) and GETs it after a reconnect or app
+    start to offer "Resume <track> at <position>".
+    """
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [PlaybackStateThrottle]
+
+    @extend_schema(
+        responses={
+            200: PlaybackStateSerializer,
+            204: OpenApiResponse(description="Nothing to resume."),
+        }
+    )
+    def get(self, request: Request) -> Response:
+        state = PlaybackState.objects.filter(user=request.user).first()
+        playable = Song.objects.visible_to(request.user)
+        if state is None or not playable.filter(pk=state.song_id).exists():
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        return Response(PlaybackStateSerializer(state).data)
+
+    @extend_schema(request=PlaybackStateSerializer, responses=PlaybackStateSerializer)
+    def put(self, request: Request) -> Response:
+        serializer = PlaybackStateSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        state, _ = PlaybackState.objects.update_or_create(
+            user=request.user,
+            defaults={
+                "song": data["song"],
+                "position_seconds": data.get("position_seconds", 0),
+                "room": data.get("room"),
+            },
+        )
+        return Response(PlaybackStateSerializer(state).data)
+
+    @extend_schema(responses={204: None})
+    def delete(self, request: Request) -> Response:
+        """Clear the log, e.g. when playback finished and there is nothing to resume."""
+        PlaybackState.objects.filter(user=request.user).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 def _range_payload(query: dict) -> dict:

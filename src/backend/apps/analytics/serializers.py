@@ -6,7 +6,7 @@ from rest_framework import serializers
 from apps.catalogue.models import Song
 from apps.rooms.models import Room
 
-from .models import ListeningEvent
+from .models import ListeningEvent, PlaybackState
 from .services import Interval
 
 # Day-level series are filled with zero buckets, so bound the range to keep
@@ -15,7 +15,24 @@ MAX_RANGE_DAYS = 366
 DEFAULT_RANGE_DAYS = 30
 
 
-class ListeningEventSerializer(serializers.ModelSerializer):
+def _check_position(song: Song, position: int) -> None:
+    if song.duration_seconds is not None and position > song.duration_seconds:
+        raise serializers.ValidationError(
+            {"position_seconds": "Position is beyond the end of the track."}
+        )
+
+
+class _PlayableSongMixin(serializers.Serializer):
+    """Limits `song` to what the requesting user can play (catalogue visibility rule)."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        request = self.context.get("request")
+        if request is not None:
+            self.fields["song"].queryset = Song.objects.visible_to(request.user)
+
+
+class ListeningEventSerializer(_PlayableSongMixin, serializers.ModelSerializer):
     """Write contract for players (web, room, mobile). Never exposes the listener."""
 
     song = serializers.PrimaryKeyRelatedField(queryset=Song.objects.none())
@@ -44,20 +61,26 @@ class ListeningEventSerializer(serializers.ModelSerializer):
         # retried event returns the stored one instead of a validation error.
         validators: list = []
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        request = self.context.get("request")
-        if request is not None:
-            # Same visibility rule as the catalogue: only songs the user can play.
-            self.fields["song"].queryset = Song.objects.visible_to(request.user)
+    def validate(self, attrs: dict) -> dict:
+        _check_position(attrs["song"], attrs.get("position_seconds", 0))
+        return attrs
+
+
+class PlaybackStateSerializer(_PlayableSongMixin, serializers.ModelSerializer):
+    """Recovery log entry (FR-53): what the user was playing and where."""
+
+    song = serializers.PrimaryKeyRelatedField(queryset=Song.objects.none())
+    room = serializers.PrimaryKeyRelatedField(
+        queryset=Room.objects.all(), required=False, allow_null=True
+    )
+
+    class Meta:
+        model = PlaybackState
+        fields = ["song", "position_seconds", "room", "updated_at"]
+        read_only_fields = ["updated_at"]
 
     def validate(self, attrs: dict) -> dict:
-        song: Song = attrs["song"]
-        position = attrs.get("position_seconds", 0)
-        if song.duration_seconds is not None and position > song.duration_seconds:
-            raise serializers.ValidationError(
-                {"position_seconds": "Position is beyond the end of the track."}
-            )
+        _check_position(attrs["song"], attrs.get("position_seconds", 0))
         return attrs
 
 

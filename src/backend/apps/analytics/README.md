@@ -1,8 +1,9 @@
 # Analytics
 
-Owner: E (Efe Arda Demir). Records listening events from the players (WBS-12.1)
-and serves aggregated statistics for the musician dashboard (WBS-12.2).
-Requirements: FR-35–FR-39, UC-15, UC-16, NFR-18. Full schema: `/api/docs/` (tag `analytics`).
+Owner: E (Efe Arda Demir). Records listening events from the players (WBS-12.1),
+serves aggregated statistics for the musician dashboard (WBS-12.2) and keeps the
+playback recovery log (WBS-12.3).
+Requirements: FR-35–FR-39, FR-53, UC-15, UC-16, NFR-18. Full schema: `/api/docs/` (tag `analytics`).
 
 ## Endpoints
 
@@ -11,6 +12,7 @@ Requirements: FR-35–FR-39, UC-15, UC-16, NFR-18. Full schema: `/api/docs/` (ta
 | POST | `/api/analytics/events/` | any logged-in user | Record a play / skip / complete event |
 | GET | `/api/analytics/dashboard/` | musician | Statistics for the requester's own tracks |
 | GET | `/api/analytics/songs/<song_id>/` | musician (track owner) | Statistics for one own track |
+| GET / PUT / DELETE | `/api/analytics/playback-state/` | any logged-in user | Recovery log: read / save / clear |
 
 ### Recording an event (players: web, room, mobile)
 
@@ -65,6 +67,39 @@ GET /api/analytics/dashboard/?start=2026-11-01&end=2026-11-07
 - `songs/<id>/` returns `range`, `track` (one `tracks` entry) and `plays_over_time`.
 - `401` when not logged in; listeners and other musicians' published tracks get
   `403`; unknown tracks and other musicians' drafts `404` (existence is not revealed). Responses contain only aggregates — no listener identifiers (NFR-18).
+
+### Disconnects and playback recovery (FR-53)
+
+There is no offline playback: music needs a connection. Events can still fail to send
+during a short disconnect or a server error, and the player should offer to resume
+after a reconnect or app restart.
+
+**Use the web helpers** in `src/frontend/src/lib/analytics/` instead of calling these
+endpoints directly:
+
+- `eventQueue.ts` — `createEventQueue({ userId })`; `queue.start()` once after login,
+  then `queue.track({ song, event_type, position_seconds?, room? })` on play / skip /
+  complete. Events are stored in `localStorage` first and sent one by one, oldest
+  first, to `POST events/`. On a network error, `401`, `429` or `5xx` they stay
+  buffered and are retried on the browser `online` event, the next event or the next
+  start; a `400` event is dropped (it can never succeed). The `client_event_id` makes
+  retries safe (`200` with the stored event).
+- `playbackRecovery.ts` — `createPlaybackRecorder({ userId })`; `recorder.update(...)`
+  on `timeupdate` (server copy at most every 10 s), `recorder.flush()` on pause / track
+  change / `pagehide`; `loadResumePoint(userId)` on start and on `online` to offer
+  "Resume at mm:ss"; `clearResumePoint(userId)` when there is nothing left to resume.
+- **Logout:** `await queue.flush()` while still logged in, then `stop()` and
+  `clearAnalyticsStorage(userId)`. Local data is kept per user, so on a shared device
+  one account's events or resume point are never sent or shown for another.
+
+Server rules:
+
+- `PUT playback-state/` with `{"song", "position_seconds", "room"?}` saves the user's
+  single recovery entry (last write wins). `GET` returns it, or `204` when there is
+  nothing to resume or the song is no longer playable. `DELETE` clears it.
+- `400` for unknown/unplayable songs, unknown rooms or a position beyond the track
+  duration; `401` when not logged in; `429` above 60 requests/minute per user. The
+  response never includes the user.
 
 ## Tests
 

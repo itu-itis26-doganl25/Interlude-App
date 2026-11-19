@@ -1,6 +1,7 @@
 """
 Owner: E (Efe). ListeningEvent from the shared WBS-1.4 data model, recorded by the
 players (WBS-12.1) and aggregated into musician statistics (WBS-12.2).
+PlaybackState is the recovery log used to resume playback (WBS-12.3, FR-53).
 """
 
 from django.conf import settings
@@ -51,3 +52,24 @@ class ListeningEvent(models.Model):
     def context(self) -> str:
         """FR-35 playback context: individual playback or a listening room."""
         return "room" if self.room_id else "individual"
+
+
+class PlaybackState(models.Model):
+    """
+    Recovery log (FR-53): the user's current track and position, updated during
+    playback so the player can offer to resume after a disconnect or restart.
+    One row per user; the latest update wins.
+    """
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="playback_state"
+    )
+    song = models.ForeignKey("catalogue.Song", on_delete=models.CASCADE, related_name="+")
+    room = models.ForeignKey(
+        "rooms.Room", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    position_seconds = models.PositiveIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return f"{self.user_id} at {self.song_id}:{self.position_seconds}"
