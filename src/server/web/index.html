@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Interlude spike — listener</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>Listener</h1>
+  <p class="muted">Joins the room and plays whatever the host is playing.</p>
+
+  <button id="join">Join room</button>
+  <audio id="audio"></audio>
+
+  <h2>Room</h2>
+  <p class="big" id="position">–</p>
+  <p class="muted" id="track"></p>
+
+  <h2>My connection</h2>
+  <table>
+    <tr><td>State</td><td id="state">not connected</td></tr>
+    <tr><td>Round trip</td><td id="rtt">–</td></tr>
+    <tr><td>Jitter buffer</td><td id="jitter">–</td></tr>
+    <tr><td>Delay behind server</td><td id="delay">–</td></tr>
+    <tr><td>Delay I'd need on my own</td><td id="need">–</td></tr>
+    <tr><td>Extra buffer to match the room</td><td id="target">–</td></tr>
+    <tr><td>Bitrate</td><td id="kbps">–</td></tr>
+    <tr><td>Packets lost</td><td id="lost">–</td></tr>
+  </table>
+
+  <script type="module">
+    import { join, fmtTime, fmtMs } from './client.js';
+    const $ = (id) => document.getElementById(id);
+    let delayMs = 0;
+
+    $('join').onclick = async () => {
+      $('join').disabled = true;
+      try {
+        await join({
+          audio: $('audio'),
+          onState: (s) => {
+            // What this listener hears now = server position minus its own delay.
+            const hearing = s.playing ? Math.max(0, s.position - delayMs / 1000) : s.position;
+            $('position').textContent = `${s.playing ? '▶' : '⏸'} ${fmtTime(hearing)} / ${fmtTime(s.duration)}`;
+            $('track').textContent = s.track;
+          },
+          onStats: (st) => {
+            delayMs = st.delayMs;
+            $('state').textContent = st.state;
+            $('rtt').textContent = fmtMs(st.rttMs);
+            $('jitter').textContent = fmtMs(st.jitterMs);
+            $('delay').textContent = fmtMs(st.delayMs);
+            $('delay').className = st.delayMs < 500 ? 'ok' : 'bad';
+            $('need').textContent = fmtMs(st.needMs);
+            $('target').textContent = st.bufferTargetMs == null ? 'not supported in this browser' : fmtMs(st.bufferTargetMs);
+            $('kbps').textContent = `${Math.round(st.kbps)} kbps`;
+            $('lost').textContent = st.packetsLost;
+          },
+        });
+      } catch (err) {
+        $('state').textContent = `error: ${err.message}`;
+        $('join').disabled = false;
+      }
+    };
+  </script>
+</body>
+</html>
