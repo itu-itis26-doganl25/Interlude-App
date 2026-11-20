@@ -4,8 +4,8 @@ Django settings for the Interlude backend.
 All environment-specific values come from environment variables. 
 Nothing secret is committed to the repository.
 """
-from pathlib import Path
 from datetime import timedelta
+from pathlib import Path
 
 import environ
 
