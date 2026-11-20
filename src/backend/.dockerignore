@@ -1,0 +1,43 @@
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Python virtual environments
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Test and coverage outputs
+.coverage
+coverage.xml
+htmlcov/
+
+# Local databases
+*.sqlite3
+*.sqlite3-journal
+
+# Local media and generated files
+media/
+staticfiles/
+
+# Git and editor files
+.git/
+.gitignore
+.vscode/
+.idea/
+.DS_Store
+
+# Docker Compose is for local development
+docker-compose.yml
