@@ -2,6 +2,7 @@ import pytest
 
 from apps.accounts.models import User
 
+
 @pytest.fixture(autouse=True)
 def no_https_redirect(settings):
     """CI runs with DEBUG off, which turns on the HTTPS redirect; the test client uses http."""

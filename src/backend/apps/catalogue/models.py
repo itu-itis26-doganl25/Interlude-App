@@ -83,7 +83,7 @@ class SongQuerySet(models.QuerySet):
 
 
 class Song(TimeStampedModel):
-    objects = SongQuerySet.as_manager()
+    
     title = models.CharField(max_length=200)
     artist = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -120,6 +120,8 @@ class Song(TimeStampedModel):
     # unpublished songs are hidden from search and streaming.
     is_published = models.BooleanField(default=False)
 
+    objects = SongQuerySet.as_manager()
+
     class Meta:
         ordering = ["-created_at"]
         indexes = [
@@ -140,17 +142,9 @@ class Song(TimeStampedModel):
             ),
         ]
 
+    
     def __str__(self) -> str:
         return self.title
-
-    def clean(self) -> None:
-        super().clean()
-        if self.album_id and self.artist_id and self.album.artist_id != self.artist_id:
-            raise ValidationError({"album": "A song can only be added to the artist's own album."})
-        if self.is_published and not self.rights_confirmed:
-            raise ValidationError(
-                {"rights_confirmed": "Confirm you hold the rights before publishing."}
-            )
 
     def save(self, *args, **kwargs):
         # Keep size/type metadata in sync with the uploaded file.
@@ -164,3 +158,13 @@ class Song(TimeStampedModel):
             if content_type:
                 self.mime_type = content_type
         super().save(*args, **kwargs)
+
+    def clean(self) -> None:
+        super().clean()
+        if self.album_id and self.artist_id and self.album.artist_id != self.artist_id:
+            raise ValidationError({"album": "A song can only be added to the artist's own album."})
+        if self.is_published and not self.rights_confirmed:
+            raise ValidationError(
+                {"rights_confirmed": "Confirm you hold the rights before publishing."}
+            )
+
